@@ -72,7 +72,10 @@ void TestMap(){
     SerializeIS sis(seri);
     std::map<int, std::string> m1;
     sis >> m1;
+    int len = m.size();
+    
     printMap(m1);
+    std::cout << "test map success!" << std::endl;
 }
 
 

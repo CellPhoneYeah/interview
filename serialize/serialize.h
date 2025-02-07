@@ -132,7 +132,7 @@ public:
     }
 
     template<typename T>
-    SerializeIS& operator>>(std::vector<T> v){
+    SerializeIS& operator>>(std::vector<T> &v){
         int veclen = 0;
         this->operator>>(veclen);
         for (int i = 0; i < veclen; i++)
@@ -145,9 +145,7 @@ public:
     }
 
     template<typename T1, typename T2>
-    SerializeIS& operator>> (std::map<T1, T2> m){
-        int maplen = 0;
-        this->operator>>(maplen);
+    SerializeIS& operator>> (std::map<T1, T2> &m){
         std::vector<T1> v1;
         std::vector<T2> v2;
         this->operator>>(v1);
