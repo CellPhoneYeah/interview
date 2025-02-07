@@ -1,6 +1,19 @@
 #include "serialize.h"
 #include <iostream>
 #include "test.h"
+#include <map>
+#include <vector>
+#include <iterator>
+
+template<typename T1, typename T2>
+void printMap(std::map<T1, T2> m){
+    for (typename std::map<T1, T2>::const_iterator i = m.begin(); i != m.end(); i++)
+    {
+        std::cout << " " << (*i).first << ":" << (*i).second;
+    }
+    std::cout << std::endl;
+}
+
 void TestBasic(){
     SerializeOS sos;
     char c = 'c';
@@ -45,7 +58,26 @@ void TestBasic(){
     std::cout << "test basic success!" << std::endl;
 }
 
+void TestMap(){
+    std::map<int, std::string> m;
+    int k1 = 10, k2 = 11, k3 = 12;
+    std::string v1 = "first", v2 = "second", v3 = "third";
+    m.insert(std::make_pair(k1, v1));
+    m.insert(std::make_pair(k2, v2));
+    m.insert(std::make_pair(k3, v3));
+    SerializeOS sos;
+    printMap(m);
+    sos << m;
+    std::string seri = sos.getStr();
+    SerializeIS sis(seri);
+    std::map<int, std::string> m1;
+    sis >> m1;
+    printMap(m1);
+}
+
+
 int main(){
     TestBasic();
+    TestMap();
     return 0;
 }

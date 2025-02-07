@@ -74,19 +74,6 @@ int main(){
             }else{
                 // client data
                 sendBrocastMessage(event_list[i].ident);
-                // char buffer[BUFFSIZE];
-                // cout << "reading :" << event_list[i].ident << endl;
-                // ssize_t len = read(event_list[i].ident, buffer, BUFFSIZE);
-                // if(len < 0){
-                //     perror("read err");
-                //     close(event_list[i].ident);
-                // }else if(len == 0){
-                //     cout << "client closed" << endl;
-                //     close(event_list[i].ident);
-                // }else{
-                //     cout << "received:" << string(buffer, len) << endl;
-                //     write(event_list[i].ident, buffer, len);
-                // }
             }
         }
     }
