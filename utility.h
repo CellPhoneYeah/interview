@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -46,6 +48,19 @@ void sendBrocastMessage(int sockfd){
         for (set<int>::iterator i = clientfds.begin(); i != clientfds.end(); i++)
         {
             if(send(*i, &brocastbuff, msglen, 0) < 0){
+                cout << "send to " << *i << " failed" << endl;
+            }
+        }
+    }
+}
+
+void doSendBrocastMessage(int sockfd, const char *buff, int len){
+    if(clientfds.size() == 1){
+        send(sockfd, buff, len, 0);
+    }else{
+        for (set<int>::iterator i = clientfds.begin(); i != clientfds.end(); i++)
+        {
+            if(send(*i, buff, len, 0) < 0){
                 cout << "send to " << *i << " failed" << endl;
             }
         }

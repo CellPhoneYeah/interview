@@ -1,5 +1,6 @@
 #include "utility.h"
 #include "user.h"
+#include "proto.h"
 
 int main(){
     int listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -73,7 +74,11 @@ int main(){
                 }
             }else{
                 // client data
-                sendBrocastMessage(event_list[i].ident);
+                //sendBrocastMessage(event_list[i].ident);
+                if(handleProto(event_list[i].ident) < 0){
+                   close(event_list[i].ident);
+                   delFromClientFds(event_list[i].ident);
+                }
             }
         }
     }

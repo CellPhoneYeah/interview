@@ -25,7 +25,7 @@ public:
         this->password = pw;
     }
     int login(string name, string pw){
-        if (loginList.contains(name))
+        if (loginList.find(name) != loginList.end())
         {
             return 1;
         }
