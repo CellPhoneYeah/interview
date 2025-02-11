@@ -42,6 +42,19 @@
             "externalConsole": false,
             "MIMode": "lldb",
             "preLaunchTask": "build serialize"
+        },
+        {
+            "name": "debug leetcode",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/leetcode/leetcode",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "build leetcode"
         }
     ]
 }

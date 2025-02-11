@@ -76,6 +76,33 @@
 				"isDefault": true
 			},
 			"detail": "compiler: /usr/bin/clang++"
+		},
+		{
+			"type": "cppbuild",
+			"label": "build leetcode",
+			"command": "/usr/bin/clang++",
+			"args": [
+				"-std=c++11",
+				"-fcolor-diagnostics",
+				"-fansi-escape-codes",
+				"-g",
+				"${workspaceFolder}/leetcode/leetcode.cpp",
+				"-I",
+				"${workspaceFolder}/leetcode",
+				"-o",
+				"${fileDirname}/leetcode"
+			],
+			"options": {
+				"cwd": "${fileDirname}/"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: /usr/bin/clang++"
 		}
 	]
 }
