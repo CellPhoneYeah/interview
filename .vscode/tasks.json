@@ -30,6 +30,7 @@
 			"label": "build client",
 			"command": "/usr/bin/clang++",
 			"args": [
+				"-std=c++11",
 				"-fcolor-diagnostics",
 				"-fansi-escape-codes",
 				"-g",
