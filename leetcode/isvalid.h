@@ -1,7 +1,6 @@
 #include <stack>
 #include <string>
 bool isValid(std::string s) {
-    s.substr()
     std::stack<char> stk;
     for(char c: s){
         if(c == '(' || c == '[' || c == '{'){

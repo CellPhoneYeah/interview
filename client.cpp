@@ -6,6 +6,11 @@ int main()
     std::cout << "input name:";
     char name[32];
     fgets(name, 32, stdin);
+    for(int i = 0; i < 32; i++){
+        if(name[i] == '\n'){
+            name[i] = '\0';
+        }
+    }
     std::cout << "input password:";
     char password[32];
     fgets(password, 32, stdin);
@@ -33,67 +38,63 @@ int main()
     kevent(kq, &event_change, 1, nullptr, 0, nullptr);
     EV_SET(&event_change, pipe_fd[0], EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, nullptr);
     kevent(kq, &event_change, 1, nullptr, 0, nullptr);
-    
+
     int isworking = 1;
     int islogout = 0;
     int islogin = 0;
     int pid = fork();
-    if(pid == 0){
+    if (pid == 0)
+    {
         // 子进程
         close(pipe_fd[0]);
         while (isworking)
         {
-            if(islogin == 0){
-                struct DataHeader dh;
-                dh.cmd = LOGIN;
-                dh.dataLen = sizeof(login);
-                write(pipe_fd[1], (const char*)&dh, sizeof(dh));
-                write(pipe_fd[1], (const char*)&login, sizeof(login));
+            if (islogin == 0)
+            {
+                write(pipe_fd[1], (const char *)&login, sizeof(login));
                 islogin = 1;
-            }else if(islogin == 1){
+            }
+            else if (islogin == 1)
+            {
                 std::cout << "waiting login..." << std::endl;
                 sleep(1);
                 islogin = 2;
             }
-            else if(islogout == 1){
+            else if (islogout == 1)
+            {
                 std::cout << "waiting logout..." << std::endl;
                 sleep(1);
                 islogout = 2;
             }
-            else{
+            else
+            {
                 char buffer[BUFFSIZE];
                 bzero(&buffer, BUFFSIZE);
                 cout << "write some message:";
                 fgets(buffer, BUFFSIZE, stdin);
                 // cout << "gets :" << string(buffer) << endl;
-                if(strncasecmp(buffer, EXITSTR, strlen(EXITSTR)) == 0){
+                if (strncasecmp(buffer, EXITSTR, strlen(EXITSTR)) == 0)
+                {
                     cout << " closed" << endl;
                     struct Logout logout;
-                    struct DataHeader dh;
-                    dh.cmd = LOGOUT;
-                    dh.dataLen = sizeof(logout);
                     strcpy(login.name, logout.name);
-                    write(pipe_fd[1], (const char*)&dh, sizeof(dh));
-                    write(pipe_fd[1], (const char*)&logout, dh.dataLen);
+                    write(pipe_fd[1], (const char *)&logout, logout.dataLen);
                     islogout = 1;
-                }else{
+                }
+                else
+                {
                     // cout << "before write :" << string(buffer) << endl;
                     struct ChatMsg chatmsg;
-                    struct DataHeader dh;
-                    dh.cmd = CHAT;
-                    dh.dataLen = sizeof(chatmsg);
                     strcpy(chatmsg.name, login.name);
                     strcpy(chatmsg.msg, buffer);
-                    if(write(pipe_fd[1], (const char*)&dh, sizeof(dh)) < 0){
-                        perror("write err");
-                        exit(-1);
-                    }
-                    write(pipe_fd[1], (const char*)&chatmsg, dh.dataLen);
+                    write(pipe_fd[1], (const char *)&chatmsg, chatmsg.dataLen);
                     // cout << "write in pipe: " << string(buffer) << endl;
                 }
             }
         }
-    }else{
+    }
+    else
+    {
         // 父进程
         close(pipe_fd[1]);
         struct kevent event;
@@ -101,64 +102,84 @@ int main()
         while (isworking)
         {
             int len = kevent(kq, nullptr, 0, &event, 1, nullptr);
-            if(event.ident == clientfd){
-                struct DataHeader dh;
-                bzero(&dh, sizeof(DataHeader));
-                ssize_t len = recv(clientfd, &dh, sizeof(dh), 0);
-                if(len <= 0){
+            if (event.ident == clientfd)
+            {
+                char byterecv[1024];
+                bzero(byterecv, 1024);
+                ssize_t len = recvHeader(clientfd, byterecv);
+                if (len <= 0)
+                {
                     std::cout << "server closed connection, so close client" << std::endl;
                     exit(-1);
                 }
-                std::cout << "recving" << dh.cmd << std::endl;
-                switch (dh.cmd)
+                DataHeader *dh = (DataHeader *)byterecv;
+                // std::cout << "client recving" << dh->cmd << std::endl;
+                switch (dh->cmd)
                 {
                 case LOGINRET:
-                    struct LoginRet loginret;
-                    recv(clientfd, &loginret, dh.dataLen, 0);
-                    std::cout << "loginret:" << loginret.code << std::endl;
-                    if(loginret.code == 0){
+                {
+                    recvWithoutHeader(clientfd, byterecv, dh->dataLen);
+                    LoginRet *loginret = (LoginRet *)byterecv;
+                    std::cout << "loginret:" << loginret->code << std::endl;
+                    if (loginret->code == 0)
+                    {
                         islogin = 2;
                     }
                     break;
+                }
                 case LOGOUTRET:
-                    struct LogoutRet logoutret;
-                    recv(clientfd, &logoutret, dh.dataLen, 0);
-                    std::cout << "loginret:" << logoutret.code << std::endl;
-                    if(logoutret.code == 0)
+                {
+                    recvWithoutHeader(clientfd, byterecv, dh->dataLen);
+                    LogoutRet *logoutret = (LogoutRet *)byterecv;
+                    std::cout << "loginret:" << logoutret->code << std::endl;
+                    if (logoutret->code == 0)
                     {
                         islogout = 2;
                         isworking = 0;
                     }
                     break;
+                }
                 case CHAT:
-                    struct ChatMsg chatmsg;
-                    recv(clientfd, &chatmsg, dh.dataLen, 0);
-                    std::cout << chatmsg.name << ":" << chatmsg.msg << std::endl;
-                    break;
-                case CHATRET:
-                    struct ChatMsgRet chatmsgret;
-                    recv(clientfd, &chatmsgret, dh.dataLen, 0);
-                    // std::cout << "message send done" << std::endl;
-                    break;
-                default:
-                    std::cout << "unexpected msg:" << dh.cmd << " len:" << dh.dataLen << std::endl;
+                {
+                    recvWithoutHeader(clientfd, byterecv, dh->dataLen);
+                    ChatMsg *chatmsg = (ChatMsg *)byterecv;
+                    std::cout << chatmsg->name << ":" << chatmsg->msg << std::endl;
                     break;
                 }
-            }else{
+                case CHATRET:
+                {
+                    recvWithoutHeader(clientfd, byterecv, dh->dataLen);
+                    ChatMsgRet *chatmsgret = (ChatMsgRet *)byterecv;
+                    // std::cout << "message send done" << std::endl;
+                    break;
+                }
+                default:
+                    std::cout << "client unexpected msg:" << dh->cmd << " len:" << dh->dataLen << std::endl;
+                    break;
+                }
+            }
+            else
+            {
                 bzero(&message, BUFFSIZE);
                 ssize_t len = read(pipe_fd[0], message, BUFFSIZE);
-                if(len == 0){
+                if (len == 0)
+                {
                     isworking = 0;
-                }else{
+                }
+                else
+                {
                     send(clientfd, message, len, 0);
                     // cout << "send finish: " << string(message) << endl;
                 }
             }
         }
     }
-    if(pid == 0){
+    if (pid == 0)
+    {
         close(pipe_fd[1]);
-    }else{
+    }
+    else
+    {
         close(pipe_fd[0]);
         close(clientfd);
     }

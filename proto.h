@@ -18,119 +18,140 @@ struct DataHeader{
     short cmd;
 };
 
-struct Login{
+#define DATAHEADER_LEN sizeof(DataHeader)
+
+int recvWithoutHeader(int sock, char*byterecv, int len){
+    return recv(sock, byterecv + DATAHEADER_LEN, len - DATAHEADER_LEN, 0);
+}
+int recvHeader(int sock, char*byterecv){
+    return recv(sock, byterecv, DATAHEADER_LEN, 0);
+}
+
+struct Login: public DataHeader{
+    Login(){
+        cmd = LOGIN;
+        dataLen = sizeof(Login);
+    }
     char name[32];
     char password[32];
 };
 
-struct LoginRet{
+struct LoginRet:public DataHeader{
+    LoginRet(){
+        cmd = LOGINRET;
+        dataLen = sizeof(LoginRet);
+    }
     int code;
 };
 
-struct Logout{
+struct Logout: public DataHeader{
+    Logout(){
+        cmd = LOGOUT;
+        dataLen = sizeof(Logout);
+    }
     char name[10];
 };
 
-struct LogoutRet{
+struct LogoutRet: public DataHeader{
+    LogoutRet(){
+        cmd = LOGOUTRET;
+        dataLen = sizeof(LogoutRet);
+    }
     int code;
 };
 
-struct ChatMsg{
+struct ChatMsg: public DataHeader{
+    ChatMsg(){
+        cmd = CHAT;
+        dataLen = sizeof(ChatMsg);
+    }
     char name[10];
     char msg[50];
 };
 
-struct ChatMsgRet{
+struct ChatMsgRet:public DataHeader{
+    ChatMsgRet(){
+        cmd = CHATRET;
+        dataLen = sizeof(ChatMsgRet);
+    }
     int code;
 };
 
-struct ErrorRet{
+struct ErrorRet:public DataHeader{
+    ErrorRet(){
+        cmd = ERROR;
+        dataLen = sizeof(ErrorRet);
+    }
     int errorCode;
 };
 
-void handleLogin(int sock, struct DataHeader &dh){
-    struct Login login;
-    int len = recv(sock, &login, dh.dataLen, 0);
+void handleLogin(int sock, char *byterecv, struct DataHeader *dh){
+    int len = recvWithoutHeader(sock, byterecv, dh->dataLen);
+    struct Login *login = (Login*)byterecv;
     if(len <= 0){
         std::cout << "login recv err" << std::endl;
     }else{
-        std::cout << "login success " << login.name << std::endl;
-        struct DataHeader dh;
-        dh.cmd = LOGINRET;
-        dh.dataLen = sizeof(LoginRet);
+        std::cout << "login success " << login->name << std::endl;
         struct LoginRet loginret;
         loginret.code = 0;
-        send(sock, (const char *)&dh, sizeof(dh), 0);
-        send(sock, (const char *)&loginret, dh.dataLen, 0);
+        send(sock, (const char *)&loginret, loginret.dataLen, 0);
     }
 }
 
-void handleLogout(int sock, struct DataHeader &dh){
+void handleLogout(int sock, char *byterecv, struct DataHeader *dh){
     struct Logout logout;
-    int len = recv(sock, &logout, dh.dataLen, 0);
+    int len = recvWithoutHeader(sock, byterecv, dh->dataLen);
     if(len <= 0){
         std::cout << "logout recv err" << std::endl;
     }else{
         std::cout << "logout success " << logout.name << std::endl;
-        struct DataHeader dh;
-        dh.cmd = LOGOUTRET;
-        dh.dataLen = sizeof(LogoutRet);
         struct LogoutRet logoutret;
         logoutret.code = 0;
-        send(sock, (const char*)&dh, sizeof(dh), 0);
-        send(sock, (const char*)&logoutret, dh.dataLen, 0);
+        send(sock, (const char*)&logoutret, logoutret.dataLen, 0);
     }
 }
 
-void handleChat(int sock, struct DataHeader &dh){
-    struct ChatMsg chatmsg;
-    int len = recv(sock, &chatmsg, dh.dataLen, 0);
+void handleChat(int sock, char* byterecv, struct DataHeader *dh){
+    int len = recvWithoutHeader(sock, byterecv, dh->dataLen);
     if(len <= 0){
         std::cout << "chatmsg recv err" << std::endl;
     }else{
-        std::cout << "chatmsg success " << chatmsg.name << std::endl;
-        char data[sizeof(dh)];
-        std::memcpy(data, &dh, sizeof(dh));
-        doSendBrocastMessage(sock, data, sizeof(dh));
-        char chatdata[dh.dataLen];
-        std::memcpy(chatdata, &chatmsg, dh.dataLen);
-        doSendBrocastMessage(sock, chatdata, dh.dataLen);
-
-        struct DataHeader dh;
-        dh.cmd = CHATRET;
-        dh.dataLen = sizeof(ChatMsgRet);
+        struct ChatMsg *chatmsg = (ChatMsg*)byterecv;
+        std::cout << "chatmsg success " << chatmsg->name << std::endl;
+        doSendBrocastMessage(sock, (char*)chatmsg, chatmsg->dataLen);
 
         struct ChatMsgRet chatmsgret;
         chatmsgret.code = 0;
-        send(sock, (const char*)&dh, sizeof(dh), 0);
-        send(sock, (const char*)&chatmsgret, dh.dataLen, 0);
+        send(sock, (const char*)&chatmsgret, chatmsgret.dataLen, 0);
     }
 }
 
+
 int handleProto(int sock){
-    struct DataHeader dh;
-    int len = recv(sock, &dh, sizeof(dh), 0);
+    char byteRecv[1024];
+    int len = recvHeader(sock, byteRecv);
     if(len <= 0){
         std::cout << "recv err" << std::endl;
         return -1;
     }else{
-        std::cout << "cmd:" << dh.cmd << std::endl;
-        switch (dh.cmd)
+        struct DataHeader *dh = (DataHeader*)byteRecv;
+        std::cout << "cmd:" << dh->cmd << std::endl;
+        switch (dh->cmd)
         {
         case LOGIN:
-            handleLogin(sock, dh);
+            handleLogin(sock, byteRecv, dh);
             break;
 
         case LOGOUT:
-            handleLogout(sock, dh);
+            handleLogout(sock, byteRecv, dh);
             break;
 
         case CHAT:
-            handleChat(sock, dh);
+            handleChat(sock, byteRecv, dh);
             break;
         
         default:
-            std::cout << "server recv unexpected cmd:" << dh.cmd << " len:" << dh.dataLen << std::endl;
+            std::cout << "server recv unexpected cmd:" << dh->cmd << " len:" << dh->dataLen << std::endl;
             break;
         }
         return 0;
