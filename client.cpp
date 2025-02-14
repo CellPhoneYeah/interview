@@ -44,6 +44,9 @@ void sendCmd(int pipe_fd, int& isworking, int&islogin, int& islogout)
             sleep(1);
             islogout = 2;
         }
+        else if(islogout == 2){
+            break;
+        }
         else
         {
             char buffer[BUFFSIZE];
@@ -70,11 +73,12 @@ void sendCmd(int pipe_fd, int& isworking, int&islogin, int& islogout)
             }
         }
     }
-    std::cout << "close"
     close(pipe_fd);
+    std::cout << "client sender close" << std::endl;
 }
 
-void readMsg(int&kq, int pipe_fd, int clientfd, int &isworking, int &islogin, int& islogout){
+void readServerMsg(int pipe_fd, int clientfd, int kq, int& isworking, int&islogin, int& islogout){
+    std::cout << "reading isworking" << pipe_fd << " " << kq << " " << clientfd << std::endl;
     struct kevent event;
     char message[BUFFSIZE];
     while (isworking)
@@ -96,6 +100,7 @@ void readMsg(int&kq, int pipe_fd, int clientfd, int &isworking, int &islogin, in
             {
             case LOGINRET:
             {
+                std::cout << "reading isworking3" << std::endl;
                 recvWithoutHeader(clientfd, byterecv, dh->dataLen);
                 LoginRet *loginret = (LoginRet *)byterecv;
                 std::cout << "loginret:" << loginret->code << std::endl;
@@ -155,6 +160,7 @@ void readMsg(int&kq, int pipe_fd, int clientfd, int &isworking, int &islogin, in
     }
     close(pipe_fd);
     close(clientfd);
+    std::cout << "client reader close" << std::endl;
 }
 
 int main()
@@ -185,9 +191,9 @@ int main()
     int islogin = 0;
     std::thread th(sendCmd, pipe_fd[1], std::ref(isworking), std::ref(islogin), std::ref(islogout));
     th.detach();
-    std::cout << "event >>>" << std::endl;
-    std::thread th2(readMsg, kq, pipe_fd[0], std::ref(isworking), std::ref(islogin), std::ref(islogout));
-    th2.join();
+    std::cout << "run isworking" << pipe_fd[0] << " " << kq << " " << clientfd << std::endl;
+    std::thread th_read(readServerMsg, pipe_fd[0], clientfd, kq, std::ref(isworking), std::ref(islogin), std::ref(islogout));
+    th_read.join();
 
     return 0;
 }

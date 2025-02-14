@@ -1,4 +1,4 @@
 *.dSYM/
-server
-client
+./server
+./client
 leetcode/leetcode
