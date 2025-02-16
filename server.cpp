@@ -75,7 +75,8 @@ int main(){
             }else{
                 // client data
                 //sendBrocastMessage(event_list[i].ident);
-                if(handleProto(event_list[i].ident) < 0){
+                char totalBuffer[2048];
+                if(handleProto(event_list[i].ident, totalBuffer) < 0){
                    close(event_list[i].ident);
                    delFromClientFds(event_list[i].ident);
                 }

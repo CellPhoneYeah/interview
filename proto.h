@@ -12,6 +12,67 @@ enum PROTO{
     CHATRET,
     ERROR
 };
+struct RingBuffer{
+    int head;
+    int tail;
+    char* buffer;
+    int size;
+    int maxSize;
+    RingBuffer(int maxSize){
+        if(maxSize > 20480){
+            exit(-2);
+        }
+        this->maxSize = maxSize;
+        this->buffer = new char[maxSize];
+    }
+
+    ~RingBuffer(){
+        delete[](this->buffer);
+    }
+
+    int writeBuffer(char *data, int len){
+        if(size + len >= maxSize){
+            return -1;
+        }
+        if(tail > head && tail + len > maxSize){
+            int firstPartSize = maxSize - tail;
+            memcpy(buffer + tail, data, firstPartSize);
+            memcpy(buffer, data + firstPartSize, len - firstPartSize);
+            size += len;
+            tail = len - firstPartSize;
+            return size;
+        }
+        memcpy(buffer + tail, data, len);
+        size += len;
+        tail += len;
+        return size;
+    }
+
+    int readBuffer(char* data, int len){
+        if(len <= 0){
+            return 0;
+        }
+        if(len > size){
+            if(head + size <= maxSize){
+                memcpy(data, buffer + head, size);
+            }else{
+                int firstPartSize = maxSize - head;
+                memcpy(data, buffer + head, firstPartSize);
+                memcpy(data + firstPartSize, buffer, size - firstPartSize);
+            }
+            return size;
+        }else{
+            if(head + len <= maxSize){
+                memcpy(data, buffer + head, len);
+            }else{
+                int firstPartSize = maxSize - head;
+                memcpy(data, buffer + head, firstPartSize);
+                memcpy(data + firstPartSize, buffer, len - firstPartSize);
+            }
+            return len;
+        }
+    }
+};
 
 struct DataHeader{
     short dataLen;
@@ -117,8 +178,8 @@ void handleChat(int sock, char* byterecv, struct DataHeader *dh){
         std::cout << "chatmsg recv err" << std::endl;
     }else{
         struct ChatMsg *chatmsg = (ChatMsg*)byterecv;
-        std::cout << "chatmsg success " << chatmsg->name << std::endl;
-        doSendBrocastMessage(sock, (char*)chatmsg, chatmsg->dataLen);
+        std::cout << "chatmsg success " << chatmsg->name << ":" << chatmsg->msg << std::endl;
+        // doSendBrocastMessage(sock, (char*)chatmsg, chatmsg->dataLen);
 
         struct ChatMsgRet chatmsgret;
         chatmsgret.code = 0;
@@ -126,17 +187,8 @@ void handleChat(int sock, char* byterecv, struct DataHeader *dh){
     }
 }
 
-
-int handleProto(int sock){
-    char byteRecv[1024];
-    int len = recvHeader(sock, byteRecv);
-    if(len <= 0){
-        std::cout << "recv err" << std::endl;
-        return -1;
-    }else{
-        struct DataHeader *dh = (DataHeader*)byteRecv;
-        std::cout << "cmd:" << dh->cmd << std::endl;
-        switch (dh->cmd)
+void handleDataHeader(int sock, struct DataHeader* dh, char* byteRecv){
+    switch (dh->cmd)
         {
         case LOGIN:
             handleLogin(sock, byteRecv, dh);
@@ -154,6 +206,51 @@ int handleProto(int sock){
             std::cout << "server recv unexpected cmd:" << dh->cmd << " len:" << dh->dataLen << std::endl;
             break;
         }
+}
+
+void putInRingBuffer(char *buffer, int head, int tail){
+
+}
+
+bool readHeader(RingBuffer* rb, char*dataHeader){
+    return rb->readBuffer(dataHeader, DATAHEADER_LEN) == DATAHEADER_LEN;
+}
+
+int handleProto(int sock, char *totalBuffer){
+    int totallen = 0;
+    int head = 0;
+    int tail = 0;
+    int cutedLen = 0;
+    char byteRecv[BUFFSIZE];
+    RingBuffer rb(2048);
+    int len = recv(sock, byteRecv, BUFFSIZE, 0);
+    char *dataHeader;
+    DataHeader* dh = nullptr;
+    bool headerReaded = false;
+    while(len > 0){
+        if(rb.size + len <= rb.maxSize){
+            rb.writeBuffer(byteRecv, len);
+        }else{
+            int tmpSize = rb.maxSize - rb.size;
+            rb.writeBuffer(byteRecv, tmpSize);
+            len -= tmpSize;
+        }
+        if(rb.size >= sizeof(DataHeader) && !headerReaded){
+            if(readHeader(&rb, dataHeader)){
+                dh = (DataHeader*)dataHeader;
+            }else{
+                std::cout << "read header failed" << std::endl;
+            }
+        }else if(headerReaded && rb.size >= dh->dataLen){
+        }
+    }
+    if(len <= 0){
+        std::cout << "clent closed " << sock << std::endl;
+        return -1;
+    }else{
+        struct DataHeader *dh = (DataHeader*)byteRecv;
+        // std::cout << "cmd:" << dh->cmd << std::endl;
+        
         return 0;
     }
 }

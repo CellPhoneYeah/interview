@@ -69,7 +69,7 @@ void sendCmd(int pipe_fd, int& isworking, int&islogin, int& islogout)
                 strcpy(chatmsg.name, login.name);
                 strcpy(chatmsg.msg, buffer);
                 write(pipe_fd, (const char *)&chatmsg, chatmsg.dataLen);
-                // cout << "write in pipe: " << string(buffer) << endl;
+                cout << "write in pipe: " << string(chatmsg.msg) << endl;
             }
         }
     }
@@ -152,11 +152,20 @@ void readServerMsg(int pipe_fd, int clientfd, int kq, int& isworking, int&islogi
             }
             else
             {
-                send(clientfd, message, len, 0);
+                if(islogin == 2){
+                    for (size_t i = 0; i < 100; i++)
+                    {
+                        string tmp = message + std::to_string(i);
+                        send(clientfd, tmp.c_str(), tmp.length(), 0);
+                    }
+                }else{
+                    send(clientfd, message, len, 0);
+                }
+                
                 // cout << "send finish: " << string(message) << endl;
             }
         }
-        sleep(1);
+        // sleep(1);
     }
     close(pipe_fd);
     close(clientfd);
