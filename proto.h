@@ -1,7 +1,10 @@
+#pragma once
 #include <sys/socket.h>
 #include <iostream>
 #include <string>
 #include "utility.h"
+
+#define READ_BUFFER_SIZE 1024
 
 enum PROTO{
     LOGIN,
@@ -208,22 +211,18 @@ void handleDataHeader(int sock, struct DataHeader* dh, char* byteRecv){
         }
 }
 
-void putInRingBuffer(char *buffer, int head, int tail){
-
-}
-
 bool readHeader(RingBuffer* rb, char*dataHeader){
     return rb->readBuffer(dataHeader, DATAHEADER_LEN) == DATAHEADER_LEN;
 }
 
-int handleProto(int sock, char *totalBuffer){
+int handleProto(int sock){
     int totallen = 0;
     int head = 0;
     int tail = 0;
     int cutedLen = 0;
-    char byteRecv[BUFFSIZE];
+    char byteRecv[READ_BUFFER_SIZE];
     RingBuffer rb(2048);
-    int len = recv(sock, byteRecv, BUFFSIZE, 0);
+    int len = recv(sock, byteRecv, READ_BUFFER_SIZE, 0);
     char *dataHeader;
     DataHeader* dh = nullptr;
     bool headerReaded = false;

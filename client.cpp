@@ -53,7 +53,7 @@ void sendCmd(int pipe_fd, int& isworking, int&islogin, int& islogout)
             bzero(&buffer, BUFFSIZE);
             cout << "write some message:";
             fgets(buffer, BUFFSIZE, stdin);
-            // cout << "gets :" << string(buffer) << endl;
+            cout << "gets :" << string(buffer) << endl;
             if (strncasecmp(buffer, EXITSTR, strlen(EXITSTR)) == 0)
             {
                 cout << " closed" << endl;
@@ -153,10 +153,21 @@ void readServerMsg(int pipe_fd, int clientfd, int kq, int& isworking, int&islogi
             else
             {
                 if(islogin == 2){
-                    for (size_t i = 0; i < 100; i++)
+                    ChatMsg* chatmsg = (ChatMsg*)message;
+                    char bkmsg[sizeof(chatmsg->msg)];
+                    strcpy(bkmsg, chatmsg->msg);
+                    int msglen = strlen(bkmsg);
+                    cout << msglen << "ready send : " << bkmsg << endl;
+                    for (int i = 0; i < 10; i++)
                     {
-                        string tmp = message + std::to_string(i);
-                        send(clientfd, tmp.c_str(), tmp.length(), 0);
+                        char tmpstr[msglen + 1 + 1];
+                        strcpy(tmpstr, bkmsg);
+                        cout << "send h>: " << tmpstr << endl;
+                        snprintf(tmpstr + msglen - 1, sizeof(tmpstr) - msglen, "%d", i);
+                        cout << "send h>>: " << tmpstr << endl;
+                        strcpy(chatmsg->msg, tmpstr);
+                        send(clientfd, (const char*)chatmsg, chatmsg->dataLen, 0);
+                        cout << "send finish: " << chatmsg->msg << endl;
                     }
                 }else{
                     send(clientfd, message, len, 0);

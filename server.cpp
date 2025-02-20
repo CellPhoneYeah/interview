@@ -1,6 +1,7 @@
 #include "utility.h"
 #include "user.h"
 #include "proto.h"
+#include "netclient.hpp"
 
 int main(){
     int listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -71,13 +72,15 @@ int main(){
                         delFromClientFds(clientfd);
                     }
                     addToClientFds(clientfd);
+                    std::cout << "after add " << clientfd << std::endl;
                 }
             }else{
                 // client data
                 //sendBrocastMessage(event_list[i].ident);
-                char totalBuffer[2048];
-                if(handleProto(event_list[i].ident, totalBuffer) < 0){
-                   close(event_list[i].ident);
+                std::cout << "read data" <<  event_list[i].ident << std::endl;
+                netclient* nc = getClient(event_list[i].ident);
+                if(nc->recvData() <= 0){
+                    nc->close();
                    delFromClientFds(event_list[i].ident);
                 }
             }
