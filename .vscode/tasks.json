@@ -6,12 +6,19 @@
 			"label": "build server",
 			"command": "/usr/bin/clang++",
 			"args": [
+				"-std=c++11",
 				"-fcolor-diagnostics",
 				"-fansi-escape-codes",
 				"-g",
+				"net/EllConn.cpp",
+				"net/EasyEllConn.cpp",
 				"server.cpp",
 				"-o",
-				"${fileDirname}/server"
+				"${fileDirname}/server",
+				"-I",
+				"${fileDirname}/net",
+				"-I",
+				"${workspaceFolder}",
 			],
 			"options": {
 				"cwd": "${fileDirname}"
@@ -34,9 +41,15 @@
 				"-fcolor-diagnostics",
 				"-fansi-escape-codes",
 				"-g",
+				"net/EllConn.cpp",
+				"net/EasyEllConn.cpp",
 				"client.cpp",
 				"-o",
-				"${fileDirname}/client"
+				"${fileDirname}/client",
+				"-I",
+				"${workspaceFolder}/net",
+				"-I",
+				"${fileDirname}",
 			],
 			"options": {
 				"cwd": "${fileDirname}"
