@@ -35,6 +35,7 @@ void EllConn::addClient(int sockFd, EllConn *ec)
 {
     if (EllConn::clientMap.find(sockFd) == EllConn::clientMap.end())
     {
+        std::cout << "new sock " << sockFd << std::endl;
         EllConn::clientMap.insert(std::make_pair(sockFd, ec));
     }
 }
@@ -43,6 +44,7 @@ void EllConn::delClient(int sockFd)
     std::unordered_map<int, EllConn *>::const_iterator it = EllConn::clientMap.find(sockFd);
     if (it != EllConn::clientMap.end())
     {
+        std::cout << "del sock " << sockFd << std::endl;
         EllConn::clientMap.erase(sockFd);
         delete((*it).second);
     }
@@ -91,6 +93,7 @@ void EllConn::close()
 {
     if (!isClosed())
     {
+        std::cout << "close fd" << _sockfd << std::endl;
         onCloseFd();
         ::close(_sockfd);
     }
@@ -247,10 +250,9 @@ int EllConn::sendData(char *data, int size)
         return -2;
     }
     int pushCount = 0;
-    char * newData = new char[size];
     if (size < WRITE_BUFFER_SIZE)
     {
-        _wc->writeQ.push(std::vector<char>(newData, newData + size));
+        _wc->writeQ.push(std::vector<char>(data, data + size));
         pushCount++;
     }
     else
@@ -404,12 +406,17 @@ int EllConn::readData()
 
 int EllConn::loopListenSock(struct kevent *events, int size)
 {
-    int changen = kevent(_kq, nullptr, 0, events, size, nullptr);
+    struct timespec ts = {0, 0};
+    int changen = kevent(_kq, nullptr, 0, events, size, &ts);
     if (changen < 0)
     {
         perror("accept error");
         close();
         return -1;
+    }
+    if(changen == 0){
+        sleep(1);
+        return 0;
     }
     sockaddr_in client_addr;
     socklen_t clientaddr_len = sizeof(client_addr);
@@ -492,7 +499,5 @@ int EllConn::loopListenSock(struct kevent *events, int size)
             std::cout << "unexpected event filter" << ev.filter << std::endl;
         }
     }
-    std::cout << "change n " << changen << std::endl;
-    sleep(1);
     return changen;
 };

@@ -31,7 +31,6 @@ int main(){
             cout << "looping" << endl;
             break;
         }
-        sleep(1);
     }
     std::cout << "runr";
     if(!eecl.isClosed())

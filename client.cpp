@@ -110,8 +110,9 @@ int main()
         exit(-1);
     }
     eec->registerReadEv();
+    EasyEllConn::addClient(eec->getSock(), eec);
     WriteContext wc;
-    wc.socket_type = SOCKET_TYPE_SOCK;
+    wc.socket_type = SOCKET_TYPE_PIPE;
     wc.targetfd = eec->getSock();
     EV_SET(&event_change, pipe_fd[0], EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, &wc);
     kevent(kq, &event_change, 1, nullptr, 0, nullptr);

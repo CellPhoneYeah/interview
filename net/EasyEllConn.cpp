@@ -13,6 +13,7 @@ bool EasyEllConn::acceptSock(int clientfd, EllConn *parentEC)
     if (EllConn::getClient(clientfd) == nullptr)
     {
         EasyEllConn *eec = new EasyEllConn(parentEC->getKQ(), clientfd);
+        eec->registerReadEv();
         EllConn::addClient(clientfd, eec);
         return true;
     }
