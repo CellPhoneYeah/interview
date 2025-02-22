@@ -1,8 +1,8 @@
 #include "utility.h"
 #include <thread>
-#include "EasyEllConn.h"
+#include "EllBaseServer.h"
 
-void sendCmd(int pipe_fd, int& isworking, int&islogin, int& islogout)
+void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
 {
     std::cout << " pipe fd:" << pipe_fd << std::endl;
     struct Login login;
@@ -86,9 +86,21 @@ void checkKqueue(int pipe_fd, EasyEllConn *eec, int kq, int& isworking, int&islo
             break;
         }
     }
-    close(pipe_fd);
-    eec->close();
     std::cout << "client reader close" << std::endl;
+}
+
+void loopConn(bool &isRunning){
+    EllBaseServer *ebs = new EllBaseServer();
+    if(ebs->connectTo(SERVER_HOST, SERVER_PORT) < 0){
+        std::cout << "connect failed" << errno << std::endl;
+        return;
+    }
+
+    while(isRunning && ebs->loopKQ() > 0){
+        sleep(1);
+        std::cout << "client looping" << std::endl;
+    }
+    delete(ebs);
 }
 
 int main()
@@ -102,7 +114,6 @@ int main()
     int kq = kqueue();
     int pipe_fd[2];
     pipe(pipe_fd);
-    struct kevent event_change;
     EasyEllConn *eec = new EasyEllConn(kq);
     if (eec->connect(SERVER_HOST, SERVER_PORT) < 0)
     {
@@ -111,19 +122,24 @@ int main()
     }
     eec->registerReadEv();
     EasyEllConn::addClient(eec->getSock(), eec);
-    WriteContext wc;
-    wc.socket_type = SOCKET_TYPE_PIPE;
-    wc.targetfd = eec->getSock();
-    EV_SET(&event_change, pipe_fd[0], EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, &wc);
+    EventContext *ec = new EventContext();
+    ec->socket_type = SOCKET_TYPE_PIPE;
+    ec->targetfd = eec->getSock();
+    struct kevent event_change;
+    EV_SET(&event_change, pipe_fd[0], EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, ec);
     kevent(kq, &event_change, 1, nullptr, 0, nullptr);
 
     int isworking = 1;
     int islogout = 0;
     int islogin = 0;
-    std::thread th(sendCmd, pipe_fd[1], std::ref(isworking), std::ref(islogin), std::ref(islogout));
-    th.detach();
-    std::thread th_read(checkKqueue, pipe_fd[0], eec, kq, std::ref(isworking), std::ref(islogin), std::ref(islogout));
-    th_read.join();
+    // std::thread th(sendCmd, pipe_fd[1], std::ref(isworking), std::ref(islogin), std::ref(islogout));
+    // th.detach();
+    // std::thread th_read(checkKqueue, pipe_fd[0], eec, kq, std::ref(isworking), std::ref(islogin), std::ref(islogout));
+    // th_read.join();
+    bool isRunning;
+    std::thread th_loop(loopConn, std::ref(isRunning));
+    th_loop.detach();
+    sendCmd(pipe_fd[1], isRunning, islogin, islogout);
 
     return 0;
 }

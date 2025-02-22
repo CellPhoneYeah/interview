@@ -12,16 +12,17 @@
 				"-g",
 				"net/EllConn.cpp",
 				"net/EasyEllConn.cpp",
+				"net/EllBaseServer.cpp",
 				"server.cpp",
 				"-o",
-				"${fileDirname}/server",
+				"${workspaceFolder}/server",
 				"-I",
-				"${fileDirname}/net",
+				"${workspaceFolder}/net",
 				"-I",
 				"${workspaceFolder}",
 			],
 			"options": {
-				"cwd": "${fileDirname}"
+				"cwd": "${workspaceFolder}"
 			},
 			"problemMatcher": [
 				"$gcc"
@@ -43,16 +44,17 @@
 				"-g",
 				"net/EllConn.cpp",
 				"net/EasyEllConn.cpp",
+				"net/EllBaseServer.cpp",
 				"client.cpp",
 				"-o",
-				"${fileDirname}/client",
+				"${workspaceFolder}/client",
 				"-I",
 				"${workspaceFolder}/net",
 				"-I",
-				"${fileDirname}",
+				"${workspaceFolder}",
 			],
 			"options": {
-				"cwd": "${fileDirname}"
+				"cwd": "${workspaceFolder}"
 			},
 			"problemMatcher": [
 				"$gcc"
@@ -77,10 +79,10 @@
 				"-I",
 				"${workspaceFolder}/testlib",
 				"-o",
-				"${fileDirname}/serializeTest"
+				"${workspaceFolder}/serializeTest"
 			],
 			"options": {
-				"cwd": "${fileDirname}/"
+				"cwd": "${workspaceFolder}/"
 			},
 			"problemMatcher": [
 				"$gcc"
@@ -104,10 +106,10 @@
 				"-I",
 				"${workspaceFolder}/leetcode",
 				"-o",
-				"${fileDirname}/leetcode"
+				"${workspaceFolder}/leetcode"
 			],
 			"options": {
-				"cwd": "${fileDirname}/"
+				"cwd": "${workspaceFolder}/"
 			},
 			"problemMatcher": [
 				"$gcc"

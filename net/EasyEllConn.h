@@ -1,4 +1,5 @@
 #include "EllConn.h"
+
 class EasyEllConn:public EllConn{
 public:
     static void brocastAll(char* data, int size);

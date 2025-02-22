@@ -83,6 +83,6 @@ EasyEllConn::~EasyEllConn() {
         onCloseFd();
         close();
     }
-    delete (_wc);
+    delete (_ec);
     std::cout << "net closed" << std::endl;
 }

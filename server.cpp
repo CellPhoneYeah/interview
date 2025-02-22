@@ -1,41 +1,74 @@
 #include "utility.h"
 #include "user.h"
 #include "proto.h"
-#include "EasyEllConn.h"
+#include "EllBaseServer.h"
+#include <thread>
 
-int main(){
-    int kq = kqueue();
-    if(kq < 0){
-        std::cout << "run0";
-        perror("kq create err");
-        exit(-1);
+void runServer(bool &isRunning){
+    // int kq = kqueue();
+    // if(kq < 0){
+    //     std::cout << "run0";
+    //     perror("kq create err");
+    //     exit(-1);
+    // }
+    // EasyEllConn eecl(kq);
+    // if(!eecl.bindAddr(SERVER_HOST, SERVER_PORT)){
+    //     std::cout << "run1";
+    //     exit(-2);
+    // }
+    // if(!eecl.listen()){
+    //     std::cout << "run2";
+    //     exit(-3);
+    // }
+    // struct kevent event_list[BUFFSIZE];
+    // cout << "start kqueue" << endl;
+    // while (isRunning)
+    // {
+    //     if(eecl.loopListenSock(event_list, BUFFSIZE) < 0){
+    //         cout << "looping" << endl;
+    //         break;
+    //     }
+    // }
+    // std::cout << "runr";
+    // if(!eecl.isClosed())
+    //     eecl.close();
+    // std::cout << "run6";
+    // close(kq);
+    EllBaseServer *ebs = new EllBaseServer();
+    if(ebs->startListen(SERVER_HOST, SERVER_PORT) < 0){
+        std::cout << "listen failed" << errno << std::endl;
+        return;
     }
-    EasyEllConn eecl(kq);
-    if(!eecl.bindAddr(SERVER_HOST, SERVER_PORT)){
-        std::cout << "run1";
-        exit(-2);
+    while(ebs->loopKQ() >= 0 && isRunning){
+        sleep(1);
+        std::cout << "looping ..." << std::endl;
     }
-    if(!eecl.listen()){
-        std::cout << "run2";
-        exit(-3);
-    }
-    if(eecl.registerReadEv() < 0){
-        std::cout << "run3";
-        exit(-4);
-    }
-    struct kevent event_list[BUFFSIZE];
-    cout << "start kqueue" << endl;
-    while (true)
+    std::cout << "closing ..." << std::endl;
+    delete(ebs);
+}
+
+int main()
+{
+    bool isRunning = true;
+    thread th(runServer, std::ref(isRunning));
+    th.detach();
+    while (1)
     {
-        if(eecl.loopListenSock(event_list, BUFFSIZE) < 0){
-            cout << "looping" << endl;
+        char w[20];
+        fgets(w, 20, stdin);
+        if (strncasecmp(w, EXITSTR, strlen(EXITSTR)) == 0)
+        {
+            isRunning = false;
+        }
+        else if (strncasecmp(w, STOPSTR, strlen(STOPSTR)) == 0)
+        {
             break;
         }
+        else
+        {
+            std::cout << "input:" << w << std::endl;
+        }
     }
-    std::cout << "runr";
-    if(!eecl.isClosed())
-        eecl.close();
-    std::cout << "run6";
-    close(kq);
+
     return 0;
 }

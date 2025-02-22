@@ -10,7 +10,7 @@
 
 #define RING_BUFFER_SIZE 10240
 #define READ_BUFFER_SIZE 1024
-#define WRITE_BUFFER_SIZE 4096
+#define WRITE_BUFFER_SIZE 64
 #define WRITE_QUEUE_SIZE 1024
 #define INVALID_SOCK (~0)
 
@@ -19,18 +19,9 @@ enum SOCKET_TYPE{
     SOCKET_TYPE_PIPE
 };
 
-struct WriteContext{
-    int fd = 0;
-    std::queue<std::vector<char> > writeQ;
-    int offsetPos = 0;
-    int socket_type = SOCKET_TYPE_SOCK;
-    int targetfd;
-};
+struct EventContext;
 
 class EllConn{
-private:
-    void registerWrite();
-    void unregisterWrite();
 protected:
     static std::unordered_map<int, EllConn*> clientMap;
     int _sockfd;
@@ -42,7 +33,7 @@ protected:
     int _last_pos;
     int _size;
     DataHeader* _dh;
-    WriteContext* _wc;
+    EventContext* _ec;
 public:
     static EllConn* getClient(int sockFd);
     static void addClient(int sockFd, EllConn* ec);
@@ -64,21 +55,34 @@ public:
     bool isBindedKQ();
 
     int registerReadEv(void* udata = nullptr);
+    void unregisterReadEv();
     int registerAcceptEv(void* udata = nullptr);
     int registerWriteEv(void* udata = nullptr);
+    int unregisterWriteEv();
 
     int connect(const char* ipaddr, int port);
     int writeSingleData();
+    void clearWriteBuffer();
 
     int sendData(char* data, int size);
 
     bool bindAddr(std::string ipAddr, int port);
 
     bool listen();
+    bool isListening(){ return _isListenFd; }
     int readData();
     int loopListenSock(struct kevent *events, int size);
 
     virtual bool acceptSock(int clientfd, EllConn* parentEC) = 0;
     virtual int handleOneProto() = 0;
     virtual void onCloseFd() = 0;
+};
+
+struct EventContext{
+    int fd = 0;
+    std::queue<std::vector<char> > writeQ;
+    int offsetPos = 0;
+    int socket_type = SOCKET_TYPE_SOCK;
+    int targetfd;
+    EllConn* ec;
 };
