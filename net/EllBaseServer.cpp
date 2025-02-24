@@ -1,5 +1,6 @@
 #include "EllBaseServer.h"
 #include <sys/event.h>
+#include <sstream>
 
 struct timespec EllBaseServer::ts = {0, 0};
 
@@ -32,18 +33,22 @@ void EllBaseServer::addConn(EllConn *ec)
     }
     _connMap[ec->getSock()] = ec;
     ec->bindKQ(_kq);
+    std::cout << "addConn" << ec->getSock() << " :" << *ec << std::endl;
 }
 void EllBaseServer::delConn(int connFd)
 {
     EllConn *ec = _connMap[connFd];
     if (ec == nullptr)
     {
+        _connMap.erase(connFd);
         return;
     }
+    std::cout << "delConn" << ec->getSock() << " :" << *ec << std::endl;
     if (!ec->isClosed())
     {
         ec->close();
     }
+    _connMap.erase(connFd);
     delete (ec);
 }
 EllConn *EllBaseServer::getConn(int connFd)
@@ -53,6 +58,7 @@ EllConn *EllBaseServer::getConn(int connFd)
 
 int EllBaseServer::handleReadEv(const struct kevent &ev)
 {
+    std::cout << "handleRead " << ev.ident << std::endl;
     int sockfd = ev.ident;
     EllConn *ec = getConn(sockfd);
     if (ec == nullptr)
@@ -68,7 +74,7 @@ int EllBaseServer::handleReadEv(const struct kevent &ev)
         EllConn *ec = (EllConn *)ev.udata;
         if (ec != nullptr)
         {
-            int totalLen = ec->readData();
+            int totalLen = ec->readData(ev);
             return totalLen;
         }
         else
@@ -147,6 +153,7 @@ void EllBaseServer::newConnection(const int newfd)
 
 int EllBaseServer::handleWriteEv(const struct kevent &ev)
 {
+    std::cout << "handleWrite" << ev.ident << std::endl;
     int sockfd = ev.ident;
     EllConn *ec = getConn(sockfd);
     if (ec == nullptr)
@@ -234,6 +241,7 @@ int EllBaseServer::startListen(std::string addr, int port){
         exit(-3);
     }
     addConn(eecl);
+    eecl->registerReadEv();
     return eecl->getSock();
 }
 
@@ -247,4 +255,27 @@ int EllBaseServer::connectTo(std::string addr, int port){
     eec->registerReadEv();
     addConn(eec);
     return eec->getSock();
+}
+
+EllConn* EllBaseServer::newPipe(int pipe_fd){
+    EasyEllConn *pipeConn = new EasyEllConn(_kq, pipe_fd, SOCKET_TYPE_PIPE);
+    pipeConn->registerReadEv();
+    addConn(pipeConn);
+    std::cout << "new pipe conn " << pipe_fd << std::endl;
+    return pipeConn;
+}
+
+std::ostream& operator<<(std::ostream& os, const EllBaseServer& ebs){
+    std::ostringstream oss;
+    for (std::unordered_map<int, EllConn*>::const_iterator i = ebs._connMap.begin(); i != ebs._connMap.end(); i++)
+    {
+        if(i->second != nullptr){
+            oss << "{fd:" << i->first << ",conn:" << *i->second << "}";
+        }else{
+            oss << "{fd:" << i->first << ",conn:nullptr" << "}";
+        }
+    }
+    
+    os << "EllBaseServer{kq:" << ebs._kq << ", connmap{" << oss.str() << "}\n";
+    return os;
 }

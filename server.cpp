@@ -39,9 +39,14 @@ void runServer(bool &isRunning){
         std::cout << "listen failed" << errno << std::endl;
         return;
     }
+    int loopCount = 0;
     while(ebs->loopKQ() >= 0 && isRunning){
         sleep(1);
-        std::cout << "looping ..." << std::endl;
+        loopCount ++;
+        if(loopCount % 20 == 0){
+            loopCount = 0;
+            std::cout << "looping ..." << *ebs << std::endl;
+        }
     }
     std::cout << "closing ..." << std::endl;
     delete(ebs);

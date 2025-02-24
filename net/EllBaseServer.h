@@ -25,6 +25,8 @@ public:
     void newConnection(const int newfd);
     int startListen(std::string addr, int port);
     int connectTo(std::string addr, int port);
+    EllConn* newPipe(int pipe_fd);
 
     int sysHandleReadEv(const struct kevent&ev);
+    friend std::ostream& operator<<(std::ostream& os, const EllBaseServer& ebs);
 };

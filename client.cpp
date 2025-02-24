@@ -2,7 +2,7 @@
 #include <thread>
 #include "EllBaseServer.h"
 
-void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
+void sendCmd(int pipe_fd, bool &isworking, int&islogin, int& islogout, EllBaseServer* ebs, int pipe_fd_out)
 {
     std::cout << " pipe fd:" << pipe_fd << std::endl;
     struct Login login;
@@ -43,6 +43,7 @@ void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
             std::cout << "waiting logout..." << std::endl;
             sleep(1);
             islogout = 2;
+            isworking = false;
         }
         else if(islogout == 2){
             break;
@@ -60,6 +61,7 @@ void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
                 struct Logout logout;
                 strcpy(login.name, logout.name);
                 write(pipe_fd, (const char *)&logout, logout.dataLen);
+                ebs->getConn(pipe_fd_out)->registerReadEv();
                 islogout = 1;
             }
             else
@@ -69,6 +71,7 @@ void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
                 strcpy(chatmsg.name, login.name);
                 strcpy(chatmsg.msg, buffer);
                 write(pipe_fd, (const char *)&chatmsg, chatmsg.dataLen);
+                ebs->getConn(pipe_fd_out)->registerReadEv();
                 std::cout << "write in pipe: " << std::string(chatmsg.msg) << std::endl;
             }
         }
@@ -77,69 +80,39 @@ void sendCmd(int pipe_fd, bool isworking, int&islogin, int& islogout)
     std::cout << "client sender close" << std::endl;
 }
 
-void checkKqueue(int pipe_fd, EasyEllConn *eec, int kq, int& isworking, int&islogin, int& islogout){
-    std::cout << "reading isworking" << pipe_fd << " " << kq << " " << eec->getSock() << std::endl;
-    struct kevent event[1024];
-    while (isworking)
-    {
-        if(eec->loopListenSock(event, 1024) < 0){
-            break;
-        }
-    }
-    std::cout << "client reader close" << std::endl;
-}
-
-void loopConn(bool &isRunning){
-    EllBaseServer *ebs = new EllBaseServer();
+void loopConn(bool &isRunning, int pipe_fd_in, EllBaseServer* ebs){
     if(ebs->connectTo(SERVER_HOST, SERVER_PORT) < 0){
         std::cout << "connect failed" << errno << std::endl;
         return;
     }
+    ebs->newPipe(pipe_fd_in);
 
-    while(isRunning && ebs->loopKQ() > 0){
+    int loopCount = 0;
+    while(isRunning && ebs->loopKQ() >= 0){
         sleep(1);
-        std::cout << "client looping" << std::endl;
+        loopCount ++;
+        if(loopCount % 10 == 0){
+            std::cout << "client looping" << *ebs << std::endl;
+            loopCount = 0;
+        }
     }
+    std::cout << "stop loop" << std::endl;
     delete(ebs);
 }
 
 int main()
 {
-    struct sockaddr_in serveraddr;
-    bzero(&serveraddr, sizeof(serveraddr));
-    serveraddr.sin_addr.s_addr = inet_addr(SERVER_HOST);
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_port = htons(SERVER_PORT);
-
-    int kq = kqueue();
     int pipe_fd[2];
     pipe(pipe_fd);
-    EasyEllConn *eec = new EasyEllConn(kq);
-    if (eec->connect(SERVER_HOST, SERVER_PORT) < 0)
-    {
-        perror("connect err");
-        exit(-1);
-    }
-    eec->registerReadEv();
-    EasyEllConn::addClient(eec->getSock(), eec);
-    EventContext *ec = new EventContext();
-    ec->socket_type = SOCKET_TYPE_PIPE;
-    ec->targetfd = eec->getSock();
-    struct kevent event_change;
-    EV_SET(&event_change, pipe_fd[0], EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, ec);
-    kevent(kq, &event_change, 1, nullptr, 0, nullptr);
 
     int isworking = 1;
     int islogout = 0;
     int islogin = 0;
-    // std::thread th(sendCmd, pipe_fd[1], std::ref(isworking), std::ref(islogin), std::ref(islogout));
-    // th.detach();
-    // std::thread th_read(checkKqueue, pipe_fd[0], eec, kq, std::ref(isworking), std::ref(islogin), std::ref(islogout));
-    // th_read.join();
-    bool isRunning;
-    std::thread th_loop(loopConn, std::ref(isRunning));
+    bool isRunning = true;
+    EllBaseServer *ebs = new EllBaseServer();
+    std::thread th_loop(loopConn, std::ref(isRunning), pipe_fd[0], ebs);
     th_loop.detach();
-    sendCmd(pipe_fd[1], isRunning, islogin, islogout);
+    sendCmd(pipe_fd[1], std::ref(isRunning), std::ref(islogin), std::ref(islogout), ebs, pipe_fd[0]);
 
     return 0;
 }

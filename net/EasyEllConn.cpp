@@ -56,7 +56,7 @@ int EasyEllConn::handleOneProto()
     case CHAT:
     {
         ChatMsg *chatmsg = (ChatMsg *)(_read_buffer);
-        std::cout << "chatmsg " << chatmsg->name << ":" << chatmsg->msg << std::endl;
+        std::cout << "recv chatmsg " << chatmsg->name << ":" << chatmsg->msg << std::endl;
         break;
     }
     case CHATRET:
@@ -86,3 +86,4 @@ EasyEllConn::~EasyEllConn() {
     delete (_ec);
     std::cout << "net closed" << std::endl;
 }
+

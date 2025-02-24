@@ -23,7 +23,7 @@ void EllConn::addClient(int sockFd, EllConn *ec)
 {
     if (EllConn::clientMap.find(sockFd) == EllConn::clientMap.end())
     {
-        std::cout << "new sock " << sockFd << std::endl;
+        std::cout << "new sock " << sockFd << "conn " << *ec << std::endl;
         EllConn::clientMap.insert(std::make_pair(sockFd, ec));
     }
 }
@@ -38,6 +38,20 @@ void EllConn::delClient(int sockFd)
     }
 }
 
+EllConn::EllConn(int kq, int sockfd, int sockType)
+{
+    _sockfd = sockfd;
+    _last_pos = 0;
+    bzero(_ring_buffer, RING_BUFFER_SIZE);
+    bzero(_read_buffer, READ_BUFFER_SIZE);
+    _dh = nullptr;
+    _read_pos = 0;
+    _ec = new EventContext();
+    _kq = kq;
+    _isListenFd = false;
+    _sock_type = sockType;
+}
+
 EllConn::EllConn(int kq, int sockfd)
 {
     _sockfd = sockfd;
@@ -49,6 +63,7 @@ EllConn::EllConn(int kq, int sockfd)
     _ec = new EventContext();
     _kq = kq;
     _isListenFd = false;
+    _sock_type = SOCKET_TYPE_SOCK;
 }
 
 EllConn::EllConn(int kq)
@@ -62,6 +77,7 @@ EllConn::EllConn(int kq)
     _ec = new EventContext();
     _kq = kq;
     _isListenFd = false;
+    _sock_type = SOCKET_TYPE_SOCK;
 }
 
 EllConn::EllConn()
@@ -75,6 +91,7 @@ EllConn::EllConn()
     _ec = new EventContext();
     _kq = -1;
     _isListenFd = false;
+    _sock_type = SOCKET_TYPE_SOCK;
 }
 
 void EllConn::close()
@@ -126,87 +143,82 @@ bool EllConn::isBindedKQ()
     return _kq != -1;
 }
 
-int EllConn::registerReadEv(void *udata)
-{
+bool EllConn::canRegisterEv(){
     if (isClosed())
     {
-        return -1;
+        return false;
     }
     if (!isBindedKQ())
     {
-        return -2;
+        return false;
+    }
+    return true;
+}
+
+int EllConn::registerReadEv(void *udata)
+{
+    if(!canRegisterEv()){
+        return -1;
     }
     fcntl(_sockfd, F_SETFL, O_NONBLOCK); // 设置为非阻塞模式
     struct kevent event_change;
+    if(udata == nullptr){
+        udata = this;
+    }
     EV_SET(&event_change, _sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, udata); // 设置为边缘模式，事件只触发一次
     int ret = kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-    std::cout << "register read ev" << _sockfd << std::endl;
+    std::cout << "register read ev " << _sockfd << std::endl;
+    _ev_list[READ_EVENT] = 1;
     return ret;
 }
 
-void EllConn::unregisterReadEv()
+int EllConn::unregisterReadEv()
 {
-    if (isClosed())
-    {
-        return;
-    }
-    if (!isBindedKQ())
-    {
-        return;
+    if(!canRegisterEv()){
+        return -1;
     }
     struct kevent event_change;
     EV_SET(&event_change, _sockfd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
     int ret = kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
     std::cout << "unregister read ev" << _sockfd << std::endl;
-    return;
+    _ev_list[READ_EVENT] = 0;
+    return ret;
 }
 
 int EllConn::registerAcceptEv(void *udata)
 {
-    if (isClosed())
-    {
+    if(!canRegisterEv()){
         return -1;
-    }
-    if (!isBindedKQ())
-    {
-        return -2;
     }
     fcntl(_sockfd, F_SETFL, O_NONBLOCK); // 设置为非阻塞模式
     struct kevent event_change;
     EV_SET(&event_change, _sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, udata); // 边缘触发
     std::cout << "register accept ev" << _sockfd << std::endl;
+    _ev_list[READ_EVENT] = 1;
     return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
 }
 
 int EllConn::registerWriteEv(void *udata)
 {
-    if (isClosed())
-    {
+    if(!canRegisterEv()){
         return -1;
-    }
-    if (!isBindedKQ())
-    {
-        return -2;
     }
     struct kevent event_change;
     EV_SET(&event_change, _sockfd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, udata); // 不使用边缘出发的写，因为系统缓冲区满是频繁遇到的事，减少对这种情况的处理
     std::cout << "register accept ev" << _sockfd << std::endl;
+    _ev_list[WRITE_EVENT] = 1;
     return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
 }
 
 int EllConn::unregisterWriteEv()
 {
-    if (isClosed())
-    {
+    if(!canRegisterEv()){
         return -1;
-    }
-    if (!isBindedKQ())
-    {
-        return -2;
     }
     struct kevent event_change;
     EV_SET(&event_change, _sockfd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
     std::cout << "unregister write ev" << _sockfd << std::endl;
+    _ev_list[WRITE_EVENT] = 0;
     return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
 }
 
@@ -338,6 +350,9 @@ bool EllConn::bindAddr(std::string ipAddr, int port)
         perror("bind err");
         exit(-1);
     }
+    bzero(_bind_ipaddr, IP_ADDRESS_LEN);
+    strcpy(_bind_ipaddr, ipAddr.c_str());
+    _bind_port = port;
     return true;
 }
 
@@ -359,38 +374,50 @@ bool EllConn::listen()
         _sockfd = INVALID_SOCK;
         exit(-1);
     }
-    registerReadEv();
     _isListenFd = true;
     return true;
 }
 
-int EllConn::readData()
+int EllConn::readSock(char* buffer, int size){
+    if(isPipe()){
+        int n = 0;
+        do {
+            n = read(_sockfd, buffer, size);
+        } while (n == -1 && errno == EINTR);
+        return n;
+    }else{
+        return recv(_sockfd, buffer, size, 0);
+    }
+}
+
+int EllConn::readData(const struct kevent &ev)
 {
     int totalLen = 0;
+    std::cout << _sockfd << " readdata" << std::endl;
     while (1)
     {
         int len;
         if (_size == 0)
         {
-            len = recv(_sockfd, _ring_buffer, RING_BUFFER_SIZE, 0);
+            len = readSock(_ring_buffer, RING_BUFFER_SIZE);
         }
         else
         {
-            len = recv(_sockfd, _ring_buffer + _size, RING_BUFFER_SIZE - _size, 0);
+            len = readSock(_ring_buffer + _size, RING_BUFFER_SIZE - _size);
         }
         if (len < 0)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                std::cout << "read edge mode block" << std::endl;
+                std::cout << ev.ident << "read edge mode block" << totalLen << std::endl;
             }
-            if (errno == ECONNRESET)
+            else if (errno == ECONNRESET)
             {
-                std::cout << "read data pause, remote conn reseted";
+                std::cout << ev.ident << "read data pause, remote conn reseted";
             }
             else
             {
-                std::cout << "read data pause, err:" << errno << std::endl;
+                std::cout  << ev.ident << "read data pause, err:" << errno << std::endl;
             }
             return totalLen;
         }
@@ -487,6 +514,7 @@ int EllConn::loopListenSock(struct kevent *events, int size)
     {
         struct kevent ev = events[i];
         uintptr_t currentfd = ev.ident;
+        
         if (currentfd == getSock() && _isListenFd)
         {
             std::cout << "accept client" << events[i].ident << std::endl;
@@ -520,6 +548,14 @@ int EllConn::loopListenSock(struct kevent *events, int size)
         }
         else if(ev.filter == EVFILT_READ)
         {
+            if (ev.flags | EV_EOF)
+            {
+                std::cout << " input has closed \n";
+                EllConn *ec = getClient(currentfd);
+                ec->close();
+                EllConn::delClient(currentfd);
+                continue;
+            }
             if(ev.udata != nullptr){
                 EventContext* currentEC = (EventContext*)ev.udata;
                 if(currentEC == nullptr){
@@ -568,7 +604,7 @@ int EllConn::loopListenSock(struct kevent *events, int size)
             if(ec == nullptr){
                 std::cout << "client lost " << currentfd << std::endl;
             }
-            if (ec->readData() <= 0)
+            if (ec->readData(ev) <= 0 || (ev.flags & EV_EOF))
             {
                 ec->close();
                 EllConn::delClient(getSock());
@@ -585,4 +621,10 @@ void EllConn::clearWriteBuffer(){
     if(_ec != nullptr){
         delete(_ec);
     }
+}
+
+std::ostream &operator<<(std::ostream &os, const EllConn &ec)
+{
+    os << &ec << "EllConn{_sockfd=" << ec._sockfd << ", ip:" << ec.getBindIp() << ", port:" << ec.getBindPort() << ", readev:" << ec._ev_list[0] << ", writeev:" << ec._ev_list[1] << ", isPipe:" << ec._sock_type << "}\n";
+    return os;
 }

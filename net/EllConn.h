@@ -12,6 +12,7 @@
 #define READ_BUFFER_SIZE 1024
 #define WRITE_BUFFER_SIZE 64
 #define WRITE_QUEUE_SIZE 1024
+#define IP_ADDRESS_LEN 40
 #define INVALID_SOCK (~0)
 
 enum SOCKET_TYPE{
@@ -19,9 +20,16 @@ enum SOCKET_TYPE{
     SOCKET_TYPE_PIPE
 };
 
+enum EVENTLIST{
+    READ_EVENT,
+    WRITE_EVENT
+};
+
 struct EventContext;
 
 class EllConn{
+private:
+    int readSock(char* buffer, int size);
 protected:
     static std::unordered_map<int, EllConn*> clientMap;
     int _sockfd;
@@ -34,11 +42,16 @@ protected:
     int _size;
     DataHeader* _dh;
     EventContext* _ec;
+    char _bind_ipaddr[IP_ADDRESS_LEN];
+    int _bind_port;
+    int _sock_type;
+    int _ev_list[4]; // [read write]
 public:
     static EllConn* getClient(int sockFd);
     static void addClient(int sockFd, EllConn* ec);
     static void delClient(int sockFd);
 
+    EllConn(int kq, int sockfd, int sockType);
     EllConn(int kq, int sockfd);
     EllConn(int kq);
     EllConn();
@@ -49,13 +62,15 @@ public:
 
     int getSock();
     bool isClosed();
+    bool isPipe(){return _sock_type == SOCKET_TYPE_PIPE;};
 
     bool checkSock();
     bool bindKQ(int kq);
     bool isBindedKQ();
 
+    bool canRegisterEv();
     int registerReadEv(void* udata = nullptr);
-    void unregisterReadEv();
+    int unregisterReadEv();
     int registerAcceptEv(void* udata = nullptr);
     int registerWriteEv(void* udata = nullptr);
     int unregisterWriteEv();
@@ -70,12 +85,15 @@ public:
 
     bool listen();
     bool isListening(){ return _isListenFd; }
-    int readData();
+    int readData(const struct kevent &ev);
     int loopListenSock(struct kevent *events, int size);
 
     virtual bool acceptSock(int clientfd, EllConn* parentEC) = 0;
     virtual int handleOneProto() = 0;
     virtual void onCloseFd() = 0;
+    const char* getBindIp()const {return _bind_ipaddr;}
+    const int getBindPort() const {return _bind_port;}
+    friend std::ostream& operator<<(std::ostream& os, const EllConn &eec);
 };
 
 struct EventContext{
