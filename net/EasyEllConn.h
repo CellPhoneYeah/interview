@@ -14,6 +14,6 @@ public:
 
     bool acceptSock(int clientfd, EllConn* parentEC)override;
 
-    int handleOneProto() override;
+    int handleOneProto(const struct kevent &ev) override;
     ~EasyEllConn() override;
 };

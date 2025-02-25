@@ -24,7 +24,7 @@ bool EasyEllConn::acceptSock(int clientfd, EllConn *parentEC)
     }
 }
 
-int EasyEllConn::handleOneProto()
+int EasyEllConn::handleOneProto(const struct kevent &ev)
 {
     std::cout << "recv cmd:" << _dh->cmd << std::endl;
     switch (_dh->cmd)

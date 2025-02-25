@@ -459,7 +459,7 @@ int EllConn::readData(const struct kevent &ev)
                 if (leftLen >= needReadSize)
                 {
                     memcpy(_read_buffer + _read_pos, _ring_buffer + _last_pos, needReadSize);
-                    handleOneProto();
+                    handleOneProto(ev);
                     _last_pos += needReadSize;
                     leftLen -= needReadSize;
                     _size -= needReadSize;
@@ -487,135 +487,6 @@ int EllConn::readData(const struct kevent &ev)
         _last_pos = 0;
     }
 }
-
-int EllConn::loopListenSock(struct kevent *events, int size)
-{
-    if(!checkSock()){
-        return -1;
-    }
-    struct timespec ts = {0, 0};
-    int changen = kevent(_kq, nullptr, 0, events, size, &ts);
-    if (changen < 0)
-    {
-        perror("accept error");
-        close();
-        return -1;
-    }
-    if(changen == 0){
-        sleep(1);
-        return 0;
-    }
-    sockaddr_in client_addr;
-    socklen_t clientaddr_len = sizeof(client_addr);
-    if(changen > 0){
-        std::cout << "kqueue event len:" << changen << std::endl;
-    }
-    for (size_t i = 0; i < changen; i++)
-    {
-        struct kevent ev = events[i];
-        uintptr_t currentfd = ev.ident;
-        
-        if (currentfd == getSock() && _isListenFd)
-        {
-            std::cout << "accept client" << events[i].ident << std::endl;
-            int clientfd = accept(_sockfd, (sockaddr *)&client_addr, &clientaddr_len);
-            if (clientfd < 0)
-            {
-                perror("accept err");
-            }
-            else
-            {
-                if (!acceptSock(clientfd, this))
-                {
-                    ::close(clientfd);
-                }
-            }
-        }
-        else if(ev.filter == EVFILT_WRITE){
-            EllConn* ec = getClient(currentfd);
-            std::cout << std::this_thread::get_id() << " th " << i << " write data to:" << ec->getSock() << " ev " << &ev.udata << std::endl;
-            for (size_t i = 0; i < 10; i++)
-            {
-                int sent = ec->writeSingleData();
-                if(sent < 0){
-                    ec->close();
-                    EllConn::delClient(ec->getSock());
-                    break;
-                }else if(sent == 0){
-                    break;
-                }
-            }
-        }
-        else if(ev.filter == EVFILT_READ)
-        {
-            if (ev.flags | EV_EOF)
-            {
-                std::cout << " input has closed \n";
-                EllConn *ec = getClient(currentfd);
-                ec->close();
-                EllConn::delClient(currentfd);
-                continue;
-            }
-            if(ev.udata != nullptr){
-                EventContext* currentEC = (EventContext*)ev.udata;
-                if(currentEC == nullptr){
-                    std::cout << "write data err, it may case memleek!" << std::endl;
-                    continue;
-                }
-                if(currentEC->socket_type == SOCKET_TYPE_PIPE){
-                    std::cout << "pipe get msg" << std::endl;
-                    char message[BUFFSIZE];
-                    bzero(&message, BUFFSIZE);
-                    ssize_t len = read(ev.ident, message, BUFFSIZE);
-                    std::cout << "read pipe:" << std::string(message) << std::endl;
-                    EllConn* targetEcn = getClient(currentEC->targetfd);
-                    if(len < 0){
-                        std::cout << "pipe err:" << errno << std::endl;
-                        struct kevent event_change;
-                        EV_SET(&event_change, ev.ident, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
-                        kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-                        ::close(ev.ident);
-                        targetEcn->close(); // close socket
-                        EllConn::delClient(currentEC->targetfd);
-                        continue;
-                    }else if(len == 0){
-                        std::cout << "pipe sender closed, so reader close" << std::endl;
-                        struct kevent event_change;
-                        EV_SET(&event_change, ev.ident, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
-                        kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-                        ::close(ev.ident); // close pipe
-                        targetEcn->close(); // close socket
-                        EllConn::delClient(currentEC->targetfd);
-                        continue;
-                    }
-                    
-                    if(currentEC->targetfd != INVALID_SOCK){
-                        if(targetEcn == nullptr){
-                            std::cout << "write data to empty target" << std::endl;
-                            continue;
-                        }
-                        targetEcn->sendData(message, len);
-                    }
-                }
-                continue;
-            }
-            std::cout << "read data" << ev.ident << std::endl;
-            EllConn* ec = getClient(currentfd);
-            if(ec == nullptr){
-                std::cout << "client lost " << currentfd << std::endl;
-            }
-            if (ec->readData(ev) <= 0 || (ev.flags & EV_EOF))
-            {
-                ec->close();
-                EllConn::delClient(getSock());
-            }
-        }else{
-            std::cout << "unexpected event filter" << ev.filter << std::endl;
-        }
-    }
-    return changen;
-};
-
 
 void EllConn::clearWriteBuffer(){
     if(_ec != nullptr){

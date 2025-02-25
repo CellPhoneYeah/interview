@@ -30,6 +30,7 @@ struct EventContext;
 class EllConn{
 private:
     int readSock(char* buffer, int size);
+    void clearWriteBuffer();
 protected:
     static std::unordered_map<int, EllConn*> clientMap;
     int _sockfd;
@@ -46,7 +47,19 @@ protected:
     int _bind_port;
     int _sock_type;
     int _ev_list[4]; // [read write]
+
+    bool isBindedKQ();
+    bool checkSock();
+    bool canRegisterEv();
+    
 public:
+    int registerReadEv(void* udata = nullptr);
+    int unregisterReadEv();
+    int registerAcceptEv(void* udata = nullptr);
+    int registerWriteEv(void* udata = nullptr);
+    int unregisterWriteEv();
+
+    bool bindKQ(int kq);
     static EllConn* getClient(int sockFd);
     static void addClient(int sockFd, EllConn* ec);
     static void delClient(int sockFd);
@@ -60,36 +73,21 @@ public:
     void close();
     int getKQ();
 
+    int readData(const struct kevent &ev);
     int getSock();
     bool isClosed();
     bool isPipe(){return _sock_type == SOCKET_TYPE_PIPE;};
 
-    bool checkSock();
-    bool bindKQ(int kq);
-    bool isBindedKQ();
-
-    bool canRegisterEv();
-    int registerReadEv(void* udata = nullptr);
-    int unregisterReadEv();
-    int registerAcceptEv(void* udata = nullptr);
-    int registerWriteEv(void* udata = nullptr);
-    int unregisterWriteEv();
-
     int connect(const char* ipaddr, int port);
     int writeSingleData();
-    void clearWriteBuffer();
-
     int sendData(char* data, int size);
-
     bool bindAddr(std::string ipAddr, int port);
 
     bool listen();
     bool isListening(){ return _isListenFd; }
-    int readData(const struct kevent &ev);
-    int loopListenSock(struct kevent *events, int size);
 
     virtual bool acceptSock(int clientfd, EllConn* parentEC) = 0;
-    virtual int handleOneProto() = 0;
+    virtual int handleOneProto(const struct kevent &ev) = 0;
     virtual void onCloseFd() = 0;
     const char* getBindIp()const {return _bind_ipaddr;}
     const int getBindPort() const {return _bind_port;}

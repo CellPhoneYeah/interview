@@ -5,35 +5,6 @@
 #include <thread>
 
 void runServer(bool &isRunning){
-    // int kq = kqueue();
-    // if(kq < 0){
-    //     std::cout << "run0";
-    //     perror("kq create err");
-    //     exit(-1);
-    // }
-    // EasyEllConn eecl(kq);
-    // if(!eecl.bindAddr(SERVER_HOST, SERVER_PORT)){
-    //     std::cout << "run1";
-    //     exit(-2);
-    // }
-    // if(!eecl.listen()){
-    //     std::cout << "run2";
-    //     exit(-3);
-    // }
-    // struct kevent event_list[BUFFSIZE];
-    // cout << "start kqueue" << endl;
-    // while (isRunning)
-    // {
-    //     if(eecl.loopListenSock(event_list, BUFFSIZE) < 0){
-    //         cout << "looping" << endl;
-    //         break;
-    //     }
-    // }
-    // std::cout << "runr";
-    // if(!eecl.isClosed())
-    //     eecl.close();
-    // std::cout << "run6";
-    // close(kq);
     EllBaseServer *ebs = new EllBaseServer();
     if(ebs->startListen(SERVER_HOST, SERVER_PORT) < 0){
         std::cout << "listen failed" << errno << std::endl;
@@ -45,7 +16,7 @@ void runServer(bool &isRunning){
         loopCount ++;
         if(loopCount % 20 == 0){
             loopCount = 0;
-            std::cout << "looping ..." << *ebs << std::endl;
+            // std::cout << "looping ..." << *ebs << std::endl;
         }
     }
     std::cout << "closing ..." << std::endl;

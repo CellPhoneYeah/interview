@@ -1,5 +1,6 @@
 #include "EasyEllConn.h"
 #include <string>
+#include <type_traits>
 
 #define LOOP_EVENT_NUM 64
 #define SYS_READ_BUFFER_SIZE 1024

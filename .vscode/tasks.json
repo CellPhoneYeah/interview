@@ -19,6 +19,8 @@
 				"-I",
 				"${workspaceFolder}/net",
 				"-I",
+				"${workspaceFolder}/common",
+				"-I",
 				"${workspaceFolder}",
 			],
 			"options": {
@@ -50,6 +52,8 @@
 				"${workspaceFolder}/client",
 				"-I",
 				"${workspaceFolder}/net",
+				"-I",
+				"${workspaceFolder}/common",
 				"-I",
 				"${workspaceFolder}",
 			],

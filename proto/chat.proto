@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package chat;
+
+message chat{
+  string name = 1;
+  string msg = 2;
+}
+
+message chatRet {
+    int32 code = 1;
+}
+
+message chatmsg{
+    string name = 1;
+    string msg = 2;
+    int32 timest = 3;
+}
