@@ -1,13 +1,13 @@
 #include "EllConn.h"
-#include <iostream>
+class EllBaseServer;
 
 class EasyEllConn:public EllConn{
 public:
     static void brocastAll(char* data, int size);
-    EasyEllConn(int kq): EllConn(kq){}
-    EasyEllConn(int kq, int sockfd): EllConn(kq, sockfd){
+    EasyEllConn(const EllBaseServer* ebs): EllConn(ebs){}
+    EasyEllConn(const EllBaseServer* ebs, int sockfd): EllConn(ebs, sockfd){
     }
-    EasyEllConn(int kq, int sockfd, int sockType): EllConn(kq, sockfd, sockType){
+    EasyEllConn(const EllBaseServer* ebs, int sockfd, int sockType): EllConn(ebs, sockfd, sockType){
     }
 
     void onCloseFd() override;

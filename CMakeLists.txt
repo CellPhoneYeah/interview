@@ -3,25 +3,6 @@ project(interview LANGUAGES CXX)
 
 set(PROTOBUF_VERSION "3.23.4")
 
-set(3RD_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd)
-set(3RD_PROTOBUF_PATH ${3RD_PATH}/protobuf)
-message(STATUS "start download protobuf to ${3RD_PROTOBUF_PATH}")
-include(FetchContent)
-FetchContent_Declare(
-  protobuf
-  GIT_REPOSITORY "https://github.com/protocolbuffers/protobuf.git"
-  GIT_TAG        "v3.23.4"
-  SOURCE_DIR     "${3RD_PROTOBUF_PATH}"
-)
-FetchContent_MakeAvailable(protobuf)
-
-# 定义关键路径变量
-set(PROTOBUF_ROOT "${3RD_PROTOBUF_PATH}")
-set(PROTOC_EXECUTABLE "${3RD_PROTOBUF_PATH}/bin/protoc")
-
-# option(BUILD_SERVER "Build server" ON)
-# option(BUILD_CLIENT "Build client" OFF)
-
 set(SRC_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,49 +18,74 @@ set(NET_SOURCES ${NET_DIR}/*.cpp)
 set(SERVER_SOURCES ${SERVER_DIR}/server.cpp)
 set(CLIENT_SOURCES ${CLIENT_DIR}/client.cpp)
 
-find_package(Protobuf REQUIRED)
+find_package(Protobuf REQUIRED CONFIG)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${PROTOBUF_INCLUDE_DIR})
 
-file(GLOB_RECURSE PROTO_FILES "${PROTO_DIR}/*.proto")
+file(GLOB_RECURSE PROTO_FILES
+        "${PROTO_DIR}/*.proto"
+        "${PROTO_DIR}/**/*.proto"
+)
 
-message(STATUS "PROTO_FILES ${PROTO_FILES}")
-message(STATUS "PROTO_GEN_DIR ${PROTO_GEN_DIR}")
-message(STATUS "Generated source files: ${PROTO_SRCS}")
-message(STATUS "Generated header files: ${PROTO_HDRS}")
 file(MAKE_DIRECTORY "${PROTO_GEN_DIR}")
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER ${PROTO_FILES})
+# 添加可执行文件
+add_executable(proto_test
+        proto_test.cpp
+        ${PROTO_FILES}
+)
 
-add_library(proto ${PROTO_HEADER} ${PROTO_SRC})
-add_executable(proto_test proto_test.cpp)
-target_link_libraries(proto_test proto ${PROTOBUF_LIBRARY})
+protobuf_generate(
+        TARGET proto_test
+        LANGUAGE cpp
+        PROTOC_OUT_DIR "${PROTO_GEN_DIR}"
+        PROTOC_OPTIONS
+        "--proto_path=${PROTO_DIR}"
+        "--proto_path=${PROTO_GEN_DIR}"
+        GENERATE_EXTENSIONS .pb.h .pb.cc
+        FILES ${PROTO_FILES}
+)
 
-# include_directories(
-#     ${COMMON_DIR}
-#     ${NET_DIR}
-# )
+# 包含生成目录（处理嵌套目录结构）
+target_include_directories(proto_test PRIVATE
+        "${PROTO_GEN_DIR}"
+)
+message(VERBOSE "include directories ${PROTO_GEN_DIR}")
 
-# file(GLOB SERVER_FILES 
-# ${SERVER_SOURCES}
-# ${NET_SOURCES}
-# )
+target_link_libraries(proto_test PRIVATE
+        protobuf::libprotobuf
+)
 
-# file(GLOB CLIENT_FILES 
-# ${CLIENT_SOURCES}
-# ${NET_SOURCES}
-# )
+message(VERBOSE "Proto files: ${PROTO_FILES}")
+get_target_property(GEN_SOURCES proto_test PROTOC_SOURCES)
+message(VERBOSE "Generated sources: ${GEN_SOURCES}")
+# 显示生成的文件路径（调试用）
+message(STATUS "Proto headers: ${PROTO_HDRS}")
+message(STATUS "Proto sources: ${PROTO_SRCS}")
 
-# if(BUILD_SERVER)
-#     add_executable(
-#         server
-#         ${SERVER_FILES}
-#     )
-# endif()
+include_directories(
+        ${COMMON_DIR}
+        ${NET_DIR}
+)
 
-# if(BUILD_CLIENT)
-#     add_executable(
-#         client
-#         ${CLIENT_FILES}
-#     )
-# endif()
+file(GLOB SERVER_FILES
+        ${SERVER_SOURCES}
+        ${NET_SOURCES}
+)
+
+file(GLOB CLIENT_FILES
+        ${CLIENT_SOURCES}
+        ${NET_SOURCES}
+)
+
+add_executable(
+        server
+        ${SERVER_FILES}
+)
+
+add_executable(
+        client
+        ${CLIENT_FILES}
+        player/player.cpp
+        player/player.h
+)

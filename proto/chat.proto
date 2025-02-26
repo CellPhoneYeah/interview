@@ -2,17 +2,17 @@ syntax = "proto3";
 
 package chat;
 
-message chat{
+message Chat{
   string name = 1;
   string msg = 2;
 }
 
-message chatRet {
+message ChatRet {
     int32 code = 1;
 }
 
-message chatmsg{
+message ChatMsg{
     string name = 1;
     string msg = 2;
-    int32 timest = 3;
+    int32 time = 3;
 }

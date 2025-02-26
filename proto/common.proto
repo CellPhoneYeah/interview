@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package common;
+
+message Header {
+  int32 msg_type = 1;
+  int32 session_id = 2;
+}
+
+message Request{
+  Header header = 1;
+  bytes play_load = 2;
+}
+
+message Response{
+  Header header = 1;
+  uint32 code = 2;
+  string msg = 3;
+}

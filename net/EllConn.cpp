@@ -2,6 +2,7 @@
 #include <thread>
 #include <fcntl.h>
 #include <cmath>
+#include "EllBaseServer.h"
 
 #define RING_BUFFER_SIZE 10240
 #define READ_BUFFER_SIZE 1024
@@ -38,7 +39,7 @@ void EllConn::delClient(int sockFd)
     }
 }
 
-EllConn::EllConn(int kq, int sockfd, int sockType)
+EllConn::EllConn(const EllBaseServer* pEbs, int sockfd, int sockType)
 {
     _sockfd = sockfd;
     _last_pos = 0;
@@ -47,12 +48,12 @@ EllConn::EllConn(int kq, int sockfd, int sockType)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = kq;
+    _kq = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = sockType;
 }
 
-EllConn::EllConn(int kq, int sockfd)
+EllConn::EllConn(const EllBaseServer* pEbs, int sockfd)
 {
     _sockfd = sockfd;
     _last_pos = 0;
@@ -61,12 +62,12 @@ EllConn::EllConn(int kq, int sockfd)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = kq;
+    _kq = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
 }
 
-EllConn::EllConn(int kq)
+EllConn::EllConn(const EllBaseServer* pEbs)
 {
     _sockfd = socket(AF_INET, SOCK_STREAM, 0);
     _last_pos = 0;
@@ -75,7 +76,7 @@ EllConn::EllConn(int kq)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = kq;
+    _kq = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
 }

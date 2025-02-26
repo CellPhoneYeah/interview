@@ -1,12 +1,12 @@
 #pragma once
-#include <unistd.h>
 #include <sstream>
-#include <arpa/inet.h>
 #include <sys/event.h>
 #include <queue>
 #include <vector>
 #include <unordered_map>
 #include "proto.h"
+
+class EllBaseServer;
 
 #define RING_BUFFER_SIZE 10240
 #define READ_BUFFER_SIZE 1024
@@ -64,9 +64,9 @@ public:
     static void addClient(int sockFd, EllConn* ec);
     static void delClient(int sockFd);
 
-    EllConn(int kq, int sockfd, int sockType);
-    EllConn(int kq, int sockfd);
-    EllConn(int kq);
+    EllConn(const EllBaseServer* ebs, int sockfd, int sockType);
+    EllConn(const EllBaseServer* ebs, int sockfd);
+    EllConn(const EllBaseServer* ebs);
     EllConn();
 
     virtual ~EllConn() = default;

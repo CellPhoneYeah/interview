@@ -12,6 +12,9 @@ private:
     struct kevent event_list[LOOP_EVENT_NUM];
     int _kq;
     char sys_buffer[SYS_READ_BUFFER_SIZE];
+    std::string listened_addr;
+    int listened_port;
+    EasyEllConn* listened_eec;
 public:
     EllBaseServer();
     EllBaseServer(int kq);
@@ -27,6 +30,9 @@ public:
     int startListen(std::string addr, int port);
     int connectTo(std::string addr, int port);
     EllConn* newPipe(int pipe_fd);
+    int getEVQ() const {return _kq;}
+    std::string getListenedAddr()const {return listened_addr;}
+    int getListenedPort()const {return listened_port;}
 
     int sysHandleReadEv(const struct kevent&ev);
     friend std::ostream& operator<<(std::ostream& os, const EllBaseServer& ebs);

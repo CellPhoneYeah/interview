@@ -7,10 +7,16 @@ struct timespec EllBaseServer::ts = {0, 0};
 EllBaseServer::EllBaseServer()
 {
     _kq = kqueue();
+    listened_addr.clear();
+    listened_port = -1;
+    listened_eec = nullptr;
 }
 EllBaseServer::EllBaseServer(int kq)
 {
     _kq = kq;
+    listened_addr.clear();
+    listened_port = -1;
+    listened_eec = nullptr;
 }
 
 EllBaseServer::~EllBaseServer(){
@@ -146,7 +152,7 @@ int EllBaseServer::handleAcceptEv(const struct kevent &ev)
 void EllBaseServer::newConnection(const int newfd)
 {
     std::cout << "accept one sock " << newfd << std::endl;
-    EasyEllConn *eec = new EasyEllConn(_kq);
+    EasyEllConn *eec = new EasyEllConn(this);
     eec->registerReadEv(); // 注册边缘模式读事件
     addConn(eec);
 }
@@ -231,7 +237,11 @@ int EllBaseServer::loopKQ()
 }
 
 int EllBaseServer::startListen(std::string addr, int port){
-    EasyEllConn *eecl = new EasyEllConn(_kq);
+    if(!listened_addr.empty()) {
+        std::cout << "has listened an address " << listened_addr << std::endl;
+        exit(-1);
+    }
+    EasyEllConn *eecl = new EasyEllConn(this);
     if(!eecl->bindAddr(addr, port)){
         std::cout << "listen run1";
         exit(-2);
@@ -242,11 +252,13 @@ int EllBaseServer::startListen(std::string addr, int port){
     }
     addConn(eecl);
     eecl->registerReadEv();
+    listened_addr = addr;
+    listened_port = port;
     return eecl->getSock();
 }
 
 int EllBaseServer::connectTo(std::string addr, int port){
-    EasyEllConn *eec = new EasyEllConn(_kq);
+    EasyEllConn *eec = new EasyEllConn(this);
     if (eec->connect(addr.c_str(), port) < 0)
     {
         perror("connect err");
@@ -258,7 +270,7 @@ int EllBaseServer::connectTo(std::string addr, int port){
 }
 
 EllConn* EllBaseServer::newPipe(int pipe_fd){
-    EasyEllConn *pipeConn = new EasyEllConn(_kq, pipe_fd, SOCKET_TYPE_PIPE);
+    EasyEllConn *pipeConn = new EasyEllConn(this, pipe_fd, SOCKET_TYPE_PIPE);
     pipeConn->registerReadEv();
     addConn(pipeConn);
     std::cout << "new pipe conn " << pipe_fd << std::endl;

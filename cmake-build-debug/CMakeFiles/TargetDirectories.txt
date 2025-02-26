@@ -1,0 +1,5 @@
+/Users/yexiaofeng/learning/interview/cmake-build-debug/CMakeFiles/proto_test.dir
+/Users/yexiaofeng/learning/interview/cmake-build-debug/CMakeFiles/server.dir
+/Users/yexiaofeng/learning/interview/cmake-build-debug/CMakeFiles/client.dir
+/Users/yexiaofeng/learning/interview/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/yexiaofeng/learning/interview/cmake-build-debug/CMakeFiles/rebuild_cache.dir

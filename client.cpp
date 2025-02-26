@@ -105,7 +105,6 @@ int main()
     int pipe_fd[2];
     pipe(pipe_fd);
 
-    int isworking = 1;
     int islogout = 0;
     int islogin = 0;
     bool isRunning = true;
