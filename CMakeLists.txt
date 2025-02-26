@@ -18,7 +18,7 @@ set(NET_SOURCES ${NET_DIR}/*.cpp)
 set(SERVER_SOURCES ${SERVER_DIR}/server.cpp)
 set(CLIENT_SOURCES ${CLIENT_DIR}/client.cpp)
 
-find_package(Protobuf REQUIRED CONFIG)
+find_package(Protobuf REQUIRED)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${PROTOBUF_INCLUDE_DIR})

@@ -194,7 +194,7 @@ int EllBaseServer::handleWriteEv(const struct kevent &ev)
     }
 }
 
-int EllBaseServer::loopKQ()
+int EllBaseServer::loopEVQ()
 {
     if (_kq <= 0)
     {

@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include "CustomProto.h"
 #include "EllNetConfig.h"
-
+class EllBaseServer;
 
 template<typename TEvent>
 class EllConn{
@@ -28,15 +28,16 @@ protected:
     int _bind_port;
     int _sock_type;
     int _ev_list[4]; // [read write]
+    const EllBaseServer* pEbs;
 
     bool isBindedKQ();
     bool checkSock();
     bool canRegisterEv();
     
 public:
-    EllConn(int kq, int sockfd, int sockType);
-    EllConn(int kq, int sockfd);
-    EllConn(int kq);
+    EllConn(const EllBaseServer* pEbs, int sockfd, int sockType);
+    EllConn(const EllBaseServer* pEbs, int sockfd);
+    EllConn(const EllBaseServer* pEbs);
     EllConn();
 
     virtual ~EllConn() = default;
@@ -66,27 +67,22 @@ public:
     bool isListening(){ return _isListenFd; }
     int readData(TEvent*ev);
     int loopListenSock(TEvent *events, int size);
-    const char* getBindIp()const {return _bind_ipaddr;}
+    const char *getBindIp() const { return _bind_ipaddr; }
     const int getBindPort() const {return _bind_port;}
 
-    virtual bool acceptSock(int clientfd, EllConn* parentConn) = 0;
+    virtual bool acceptSock(int clientfd, TEvent* ev) = 0;
     virtual int handleOneProto() = 0;
     virtual void onCloseFd() = 0;
     virtual int doRegisterReadEv(void* data) = 0;
     virtual int doUnregisterReadEv() = 0;
     virtual int doRegisterWriteEv(void* data) = 0;
     virtual int doUnregisterWriteEv() = 0;
-    template<typename TEvent>
     virtual int getEventFd(TEvent*event) = 0;
-    template<typename TEvent>
     virtual int getEventFlag(TEvent*event) = 0;
-    template<typename TEvent>
     virtual int getEventFilter(TEvent*event) = 0;
-    template<typename TEvent>
     virtual void* getEventUdata(TEvent*event) = 0;
-    template<typename TEvent>
     virtual int loopEvent(TEvent* events, int size);
 
-    template<typename TEvent>
     virtual void* deleteReadEvent(TEvent*event) = 0;
+    void clearWriteBuffer();
 };

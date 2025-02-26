@@ -1,11 +1,10 @@
 #include <unordered_map>
-class EllConn;
-
+class EllConnBase;
 class ConnManager{
 private:
-    static std::unordered_map<int, EllConn*> clientMap;
+    static std::unordered_map<int, EllConnBase*> clientMap;
 public:
-    static EllConn* getClient(int sockFd);
-    static void addClient(int sockFd, EllConn* ec);
+    static EllConnBase* getClient(int sockFd);
+    static void addClient(int sockFd, EllConnBase* ecb);
     static void delClient(int sockFd);
-}
+};

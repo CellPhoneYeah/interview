@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include "CustomProto.h"
+#include "EllBaseServer.h"
 
 
 template<typename TEvent>
@@ -16,7 +17,7 @@ void EllConn<TEvent>::initBuff(char* arr, int size){
 }
 
 template<typename TEvent>
-EllConn<TEvent>::EllConn(int evQ, int sockfd, int sockType)
+EllConn<TEvent>::EllConn(const EllBaseServer* pEbs, int sockfd, int sockType)
 {
     _sockfd = sockfd;
     _last_pos = 0;
@@ -25,13 +26,14 @@ EllConn<TEvent>::EllConn(int evQ, int sockfd, int sockType)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _evQ = evQ;
+    _evQ = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = sockType;
+    this.pEbs = pEbs;
 }
 
 template<typename TEvent>
-EllConn<TEvent>::EllConn(int evQ, int sockfd)
+EllConn<TEvent>::EllConn(const EllBaseServer* pEbs, int sockfd)
 {
     _sockfd = sockfd;
     _last_pos = 0;
@@ -40,13 +42,14 @@ EllConn<TEvent>::EllConn(int evQ, int sockfd)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _evQ = evQ;
+    _evQ = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
+    this.pEbs = pEbs;
 }
 
 template<typename TEvent>
-EllConn<TEvent>::EllConn(int evQ)
+EllConn<TEvent>::EllConn(const EllBaseServer* pEvs)
 {
     _sockfd = socket(AF_INET, SOCK_STREAM, 0);
     _last_pos = 0;
@@ -55,9 +58,10 @@ EllConn<TEvent>::EllConn(int evQ)
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _evQ = evQ;
+    _evQ = pEbs->getEVQ();
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
+    this.pEbs = pEbs;
 }
 
 template<typename TEvent>
@@ -518,7 +522,7 @@ int EllConn<TEvent>::loopListenSock(TEvent*events, int size)
             }
             else
             {
-                if (!acceptSock(clientfd, this))
+                if (!acceptSock(clientfd, ev))
                 {
                     ::close(clientfd);
                 }
