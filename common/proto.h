@@ -4,8 +4,6 @@
 #include <string>
 #include "utility.h"
 
-#define READ_BUFFER_SIZE 1024
-
 enum PROTO{
     LOGIN,
     LOGINRET,
@@ -82,7 +80,6 @@ struct DataHeader{
     short cmd;
 };
 
-#define DATAHEADER_LEN sizeof(DataHeader)
 
 // int recvWithoutHeader(int sock, char*byterecv, int len){
 //     return recv(sock, byterecv + DATAHEADER_LEN, len - DATAHEADER_LEN, 0);

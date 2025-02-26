@@ -1,49 +1,30 @@
-#pragma once
+#include <unistd.h>
 #include <sstream>
-#include <sys/event.h>
+#include <arpa/inet.h>
 #include <queue>
 #include <vector>
 #include <unordered_map>
-#include "proto.h"
+#include "CustomProto.h"
+#include "EllNetConfig.h"
 
-class EllBaseServer;
 
-#define RING_BUFFER_SIZE 10240
-#define READ_BUFFER_SIZE 1024
-#define WRITE_BUFFER_SIZE 64
-#define WRITE_QUEUE_SIZE 1024
-#define IP_ADDRESS_LEN 40
-#define INVALID_SOCK (~0)
-
-enum SOCKET_TYPE{
-    SOCKET_TYPE_SOCK,
-    SOCKET_TYPE_PIPE
-};
-
-enum EVENTLIST{
-    READ_EVENT,
-    WRITE_EVENT
-};
-
-struct EventContext;
-
+template<typename TEvent>
 class EllConn{
 private:
     int readSock(char* buffer, int size);
-    void clearWriteBuffer();
+    void initBuff(char* arr, int size);
 protected:
-    static std::unordered_map<int, EllConn*> clientMap;
     int _sockfd;
     bool _isListenFd;
-    int _kq;
-    char _ring_buffer[RING_BUFFER_SIZE];
-    char _read_buffer[READ_BUFFER_SIZE];
+    int _evQ;
+    char _ring_buffer[ENConfig.RING_BUFFER_SIZE];
+    char _read_buffer[ENConfig.READ_BUFFER_SIZE];
     int _read_pos;
     int _last_pos;
     int _size;
     DataHeader* _dh;
     EventContext* _ec;
-    char _bind_ipaddr[IP_ADDRESS_LEN];
+    char _bind_ipaddr[ENConfig.IP_ADDRESS_LEN];
     int _bind_port;
     int _sock_type;
     int _ev_list[4]; // [read write]
@@ -53,30 +34,28 @@ protected:
     bool canRegisterEv();
     
 public:
-    int registerReadEv(void* udata = nullptr);
-    int unregisterReadEv();
-    int registerAcceptEv(void* udata = nullptr);
-    int registerWriteEv(void* udata = nullptr);
-    int unregisterWriteEv();
-
-    bool bindKQ(int kq);
-    static EllConn* getClient(int sockFd);
-    static void addClient(int sockFd, EllConn* ec);
-    static void delClient(int sockFd);
-
-    EllConn(const EllBaseServer* ebs, int sockfd, int sockType);
-    EllConn(const EllBaseServer* ebs, int sockfd);
-    EllConn(const EllBaseServer* ebs);
+    EllConn(int kq, int sockfd, int sockType);
+    EllConn(int kq, int sockfd);
+    EllConn(int kq);
     EllConn();
 
     virtual ~EllConn() = default;
     void close();
-    int getKQ();
+    int getEVQ() {return _evQ;};
 
-    int readData(const struct kevent &ev);
-    int getSock();
+    int getSock() {return _sockfd;};
     bool isClosed();
     bool isPipe(){return _sock_type == SOCKET_TYPE_PIPE;};
+
+    bool checkSock();
+    bool bindEVQ(int kq);
+    bool isBindedEVQ();
+
+    bool canRegisterEv();
+    int registerReadEv(void* udata = nullptr);
+    int unregisterReadEv();
+    int registerWriteEv(void* udata = nullptr);
+    int unregisterWriteEv();
 
     int connect(const char* ipaddr, int port);
     int writeSingleData();
@@ -85,20 +64,29 @@ public:
 
     bool listen();
     bool isListening(){ return _isListenFd; }
-
-    virtual bool acceptSock(int clientfd, EllConn* parentEC) = 0;
-    virtual int handleOneProto(const struct kevent &ev) = 0;
-    virtual void onCloseFd() = 0;
+    int readData(TEvent*ev);
+    int loopListenSock(TEvent *events, int size);
     const char* getBindIp()const {return _bind_ipaddr;}
     const int getBindPort() const {return _bind_port;}
-    friend std::ostream& operator<<(std::ostream& os, const EllConn &eec);
-};
 
-struct EventContext{
-    int fd = 0;
-    std::queue<std::vector<char> > writeQ;
-    int offsetPos = 0;
-    int socket_type = SOCKET_TYPE_SOCK;
-    int targetfd;
-    EllConn* ec;
+    virtual bool acceptSock(int clientfd, EllConn* parentConn) = 0;
+    virtual int handleOneProto() = 0;
+    virtual void onCloseFd() = 0;
+    virtual int doRegisterReadEv(void* data) = 0;
+    virtual int doUnregisterReadEv() = 0;
+    virtual int doRegisterWriteEv(void* data) = 0;
+    virtual int doUnregisterWriteEv() = 0;
+    template<typename TEvent>
+    virtual int getEventFd(TEvent*event) = 0;
+    template<typename TEvent>
+    virtual int getEventFlag(TEvent*event) = 0;
+    template<typename TEvent>
+    virtual int getEventFilter(TEvent*event) = 0;
+    template<typename TEvent>
+    virtual void* getEventUdata(TEvent*event) = 0;
+    template<typename TEvent>
+    virtual int loopEvent(TEvent* events, int size);
+
+    template<typename TEvent>
+    virtual void* deleteReadEvent(TEvent*event) = 0;
 };

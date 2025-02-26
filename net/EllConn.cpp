@@ -2,100 +2,81 @@
 #include <thread>
 #include <fcntl.h>
 #include <cmath>
-#include "EllBaseServer.h"
+#include "ConnManager.h"
+#include "EllNetConfig.h"
+#include "EventContext.h"
+#include <iostream>
+#include <cstring>
+#include "CustomProto.h"
 
-#define RING_BUFFER_SIZE 10240
-#define READ_BUFFER_SIZE 1024
-#define WRITE_QUEUE_SIZE 1024
-#define INVALID_SOCK (~0)
 
-std::unordered_map<int, EllConn*> EllConn::clientMap;
-
-EllConn *EllConn::getClient(int sockFd)
-{
-    if (EllConn::clientMap.find(sockFd) != EllConn::clientMap.end())
-    {
-        return (*EllConn::clientMap.find(sockFd)).second;
-    }
-    return nullptr;
+template<typename TEvent>
+void EllConn<TEvent>::initBuff(char* arr, int size){
+    std::fill(arr, arr + size, '\0');
 }
 
-void EllConn::addClient(int sockFd, EllConn *ec)
-{
-    if (EllConn::clientMap.find(sockFd) == EllConn::clientMap.end())
-    {
-        std::cout << "new sock " << sockFd << "conn " << *ec << std::endl;
-        EllConn::clientMap.insert(std::make_pair(sockFd, ec));
-    }
-}
-void EllConn::delClient(int sockFd)
-{
-    std::unordered_map<int, EllConn *>::const_iterator it = EllConn::clientMap.find(sockFd);
-    if (it != EllConn::clientMap.end())
-    {
-        std::cout << "del sock " << sockFd << std::endl;
-        EllConn::clientMap.erase(sockFd);
-        delete((*it).second);
-    }
-}
-
-EllConn::EllConn(const EllBaseServer* pEbs, int sockfd, int sockType)
+template<typename TEvent>
+EllConn<TEvent>::EllConn(int evQ, int sockfd, int sockType)
 {
     _sockfd = sockfd;
     _last_pos = 0;
-    bzero(_ring_buffer, RING_BUFFER_SIZE);
-    bzero(_read_buffer, READ_BUFFER_SIZE);
+    initBuff(_ring_buffer, ENConfig.RING_BUFFER_SIZE);
+    initBuff(_read_buffer, ENConfig.READ_BUFFER_SIZE);
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = pEbs->getEVQ();
+    _evQ = evQ;
     _isListenFd = false;
     _sock_type = sockType;
 }
 
-EllConn::EllConn(const EllBaseServer* pEbs, int sockfd)
+template<typename TEvent>
+EllConn<TEvent>::EllConn(int evQ, int sockfd)
 {
     _sockfd = sockfd;
     _last_pos = 0;
-    bzero(_ring_buffer, RING_BUFFER_SIZE);
-    bzero(_read_buffer, READ_BUFFER_SIZE);
+    initBuff(_ring_buffer, ENConfig.RING_BUFFER_SIZE);
+    initBuff(_read_buffer, ENConfig.READ_BUFFER_SIZE);
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = pEbs->getEVQ();
+    _evQ = evQ;
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
 }
 
-EllConn::EllConn(const EllBaseServer* pEbs)
+template<typename TEvent>
+EllConn<TEvent>::EllConn(int evQ)
 {
     _sockfd = socket(AF_INET, SOCK_STREAM, 0);
     _last_pos = 0;
-    bzero(_ring_buffer, RING_BUFFER_SIZE);
-    bzero(_read_buffer, READ_BUFFER_SIZE);
+    initBuff(_ring_buffer, ENConfig.RING_BUFFER_SIZE);
+    initBuff(_read_buffer, ENConfig.READ_BUFFER_SIZE);
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = pEbs->getEVQ();
+    _evQ = evQ;
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
 }
 
-EllConn::EllConn()
+template<typename TEvent>
+EllConn<TEvent>::EllConn()
 {
     _sockfd = socket(AF_INET, SOCK_STREAM, 0);
     _last_pos = 0;
-    bzero(_ring_buffer, RING_BUFFER_SIZE);
-    bzero(_read_buffer, READ_BUFFER_SIZE);
+    initBuff(_ring_buffer, ENConfig.RING_BUFFER_SIZE);
+    initBuff(_read_buffer, ENConfig.READ_BUFFER_SIZE);
     _dh = nullptr;
     _read_pos = 0;
     _ec = new EventContext();
-    _kq = -1;
+    _evQ = -1;
     _isListenFd = false;
     _sock_type = SOCKET_TYPE_SOCK;
 }
 
-void EllConn::close()
+template<typename TEvent>
+void EllConn<TEvent>::close()
 {
     if (!isClosed())
     {
@@ -109,124 +90,128 @@ void EllConn::close()
     _sockfd = INVALID_SOCK;
 }
 
-int EllConn::getKQ()
+template<typename TEvent>
+int EllConn<TEvent>::getEVQ()
 {
-    return _kq;
+    return _evQ;
 }
 
-int EllConn::getSock()
+template<typename TEvent>
+int EllConn<TEvent>::getSock()
 {
     return _sockfd;
 }
 
-bool EllConn::isClosed()
+template<typename TEvent>
+bool EllConn<TEvent>::isClosed()
 {
     return !checkSock();
 }
 
-bool EllConn::checkSock()
+template<typename TEvent>
+bool EllConn<TEvent>::checkSock()
 {
     return _sockfd != INVALID_SOCK;
 }
 
-bool EllConn::bindKQ(int kq)
+template<typename TEvent>
+bool EllConn<TEvent>::bindEVQ(int evQ)
 {
-    if(isBindedKQ())
+    if(isBindedEVQ())
     {
         return false;
     }
-    _kq = kq;
+    _evQ = evQ;
     return true;
 }
 
-bool EllConn::isBindedKQ()
+template<typename TEvent>
+bool EllConn<TEvent>::isBindedEVQ()
 {
-    return _kq != -1;
+    return _evQ != -1;
 }
 
-bool EllConn::canRegisterEv(){
+template<typename TEvent>
+bool EllConn<TEvent>::canRegisterEv(){
     if (isClosed())
     {
         return false;
     }
-    if (!isBindedKQ())
+    if (!isBindedEVQ())
     {
         return false;
     }
     return true;
 }
 
-int EllConn::registerReadEv(void *udata)
+template<typename TEvent>
+int EllConn<TEvent>::registerReadEv(void *udata)
 {
     if(!canRegisterEv()){
         return -1;
     }
     fcntl(_sockfd, F_SETFL, O_NONBLOCK); // 设置为非阻塞模式
-    struct kevent event_change;
     if(udata == nullptr){
         udata = this;
     }
-    EV_SET(&event_change, _sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, udata); // 设置为边缘模式，事件只触发一次
-    int ret = kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-    std::cout << "register read ev " << _sockfd << std::endl;
-    _ev_list[READ_EVENT] = 1;
+   int ret = doRegisterReadEv(udata);
+    if(ret > 0){
+        _ev_list[READ_EVENT] = 1;
+        return ret;
+        std::cout << "register read ev success " << _sockfd << std::endl;
+    }
     return ret;
 }
 
-int EllConn::unregisterReadEv()
+template<typename TEvent>
+int EllConn<TEvent>::unregisterReadEv()
 {
-    if(!canRegisterEv()){
+    if(!checkSock()){
         return -1;
     }
-    struct kevent event_change;
-    EV_SET(&event_change, _sockfd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
-    int ret = kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-    std::cout << "unregister read ev" << _sockfd << std::endl;
-    _ev_list[READ_EVENT] = 0;
+    int ret = doUnregisterReadEv();
+    if(ret == 0){
+        std::cout << "unregister read ev" << _sockfd << std::endl;
+        _ev_list[READ_EVENT] = 0;
+    }
+    
     return ret;
 }
 
-int EllConn::registerAcceptEv(void *udata)
+template<typename TEvent>
+int EllConn<TEvent>::registerWriteEv(void *udata)
+{
+    if(!checkSock()){
+        return -1;
+    }
+    int ret = doRegisterWriteEv(udata);
+    if(ret == 0){
+        std::cout << "register write ev success " << _sockfd << std::endl;
+        _ev_list[WRITE_EVENT] = 1;
+    }
+    return ret;
+}
+
+template<typename TEvent>
+int EllConn<TEvent>::unregisterWriteEv()
 {
     if(!canRegisterEv()){
         return -1;
     }
-    fcntl(_sockfd, F_SETFL, O_NONBLOCK); // 设置为非阻塞模式
-    struct kevent event_change;
-    EV_SET(&event_change, _sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, udata); // 边缘触发
-    std::cout << "register accept ev" << _sockfd << std::endl;
-    _ev_list[READ_EVENT] = 1;
-    return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-}
-
-int EllConn::registerWriteEv(void *udata)
-{
-    if(!canRegisterEv()){
-        return -1;
+    int ret = doUnregisterWriteEv();
+    if(ret == 0){
+        std::cout << "unregister write ev success " << _sockfd << std::endl;
+        _ev_list[WRITE_EVENT] = 0;
     }
-    struct kevent event_change;
-    EV_SET(&event_change, _sockfd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, udata); // 不使用边缘出发的写，因为系统缓冲区满是频繁遇到的事，减少对这种情况的处理
-    std::cout << "register accept ev" << _sockfd << std::endl;
-    _ev_list[WRITE_EVENT] = 1;
-    return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
+    
+    return ret;
 }
 
-int EllConn::unregisterWriteEv()
-{
-    if(!canRegisterEv()){
-        return -1;
-    }
-    struct kevent event_change;
-    EV_SET(&event_change, _sockfd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
-    std::cout << "unregister write ev" << _sockfd << std::endl;
-    _ev_list[WRITE_EVENT] = 0;
-    return kevent(_kq, &event_change, 1, nullptr, 0, nullptr);
-}
-
-int EllConn::connect(const char *ipaddr, int port)
+template<typename TEvent>
+int EllConn<TEvent>::connect(const char *ipaddr, int port)
 {
     struct sockaddr_in targetAddr;
-    bzero(&targetAddr, sizeof(targetAddr));
+    initBuff((char*)&targetAddr, sizeof(targetAddr));
     targetAddr.sin_family = AF_INET;
     targetAddr.sin_addr.s_addr = inet_addr(ipaddr);
     targetAddr.sin_port = htons(port);
@@ -243,7 +228,8 @@ int EllConn::connect(const char *ipaddr, int port)
     }
 }
 
-int EllConn::writeSingleData()
+template<typename TEvent>
+int EllConn<TEvent>::writeSingleData()
 {
     if (_ec->writeQ.size() == 0)
     {
@@ -294,7 +280,8 @@ int EllConn::writeSingleData()
     }
 }
 
-int EllConn::sendData(char *data, int size)
+template<typename TEvent>
+int EllConn<TEvent>::sendData(char *data, int size)
 {
     if (isClosed())
     {
@@ -303,11 +290,11 @@ int EllConn::sendData(char *data, int size)
     if(size == 0){
         return -2;
     }
-    if(size >= WRITE_BUFFER_SIZE * 10){
+    if(size >= ENConfig.WRITE_BUFFER_SIZE * 10){
         return -3;
     }
     int pushCount = 0;
-    if (size < WRITE_BUFFER_SIZE)
+    if (size < ENConfig.WRITE_BUFFER_SIZE)
     {
         _ec->writeQ.push(std::vector<char>(data, data + size));
         std::cout << "push to WriteQ" << size << std::endl;
@@ -317,16 +304,16 @@ int EllConn::sendData(char *data, int size)
     {
         int leftSize = size;
         int lastOffset = 0;
-        int count = ceil((double)size / WRITE_BUFFER_SIZE);
+        int count = ceil((double)size / ENConfig.WRITE_BUFFER_SIZE);
         for (int i = 0; i < count; i++)
         {
             if (leftSize > 0)
             {
-                _ec->writeQ.push(std::vector<char>(data + lastOffset, data + lastOffset + WRITE_BUFFER_SIZE));
-                std::cout << "push to WriteQ1" << WRITE_BUFFER_SIZE << std::endl;
+                _ec->writeQ.push(std::vector<char>(data + lastOffset, data + lastOffset + ENConfig.WRITE_BUFFER_SIZE));
+                std::cout << "push to WriteQ1" << ENConfig.WRITE_BUFFER_SIZE << std::endl;
             }
-            leftSize -= WRITE_BUFFER_SIZE;
-            lastOffset += WRITE_BUFFER_SIZE;
+            leftSize -= ENConfig.WRITE_BUFFER_SIZE;
+            lastOffset += ENConfig.WRITE_BUFFER_SIZE;
             pushCount++;
         }
     }
@@ -335,14 +322,15 @@ int EllConn::sendData(char *data, int size)
     return pushCount;
 }
 
-bool EllConn::bindAddr(std::string ipAddr, int port)
+template<typename TEvent>
+bool EllConn<TEvent>::bindAddr(std::string ipAddr, int port)
 {
     if (!checkSock())
     {
         return false;
     }
     struct sockaddr_in server_addr;
-    bzero(&server_addr, sizeof(server_addr));
+    initBuff((char*)&server_addr, sizeof(server_addr));
     server_addr.sin_addr.s_addr = inet_addr(ipAddr.c_str());
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -351,23 +339,24 @@ bool EllConn::bindAddr(std::string ipAddr, int port)
         perror("bind err");
         exit(-1);
     }
-    bzero(_bind_ipaddr, IP_ADDRESS_LEN);
+    initBuff(_bind_ipaddr, ENConfig.IP_ADDRESS_LEN);
     strcpy(_bind_ipaddr, ipAddr.c_str());
     _bind_port = port;
     return true;
 }
 
-bool EllConn::listen()
+template<typename TEvent>
+bool EllConn<TEvent>::listen()
 {
     if (!checkSock())
     {
         return false;
     }
-    if(!isBindedKQ()){
+    if(!isBindedEVQ()){
         return false;
     }
     fcntl(_sockfd, F_SETFL, O_NONBLOCK);
-    int listenret = ::listen(_sockfd, MAX_CANON);
+    int listenret = ::listen(_sockfd, ENConfig.MAX_LISTEN_CONN);
     if (listenret < 0)
     {
         perror("listen error");
@@ -379,7 +368,8 @@ bool EllConn::listen()
     return true;
 }
 
-int EllConn::readSock(char* buffer, int size){
+template<typename TEvent>
+int EllConn<TEvent>::readSock(char* buffer, int size){
     if(isPipe()){
         int n = 0;
         do {
@@ -391,7 +381,8 @@ int EllConn::readSock(char* buffer, int size){
     }
 }
 
-int EllConn::readData(const struct kevent &ev)
+template<typename TEvent>
+int EllConn<TEvent>::readData(TEvent*ev)
 {
     int totalLen = 0;
     std::cout << _sockfd << " readdata" << std::endl;
@@ -400,25 +391,25 @@ int EllConn::readData(const struct kevent &ev)
         int len;
         if (_size == 0)
         {
-            len = readSock(_ring_buffer, RING_BUFFER_SIZE);
+            len = readSock(_ring_buffer, ENConfig.RING_BUFFER_SIZE);
         }
         else
         {
-            len = readSock(_ring_buffer + _size, RING_BUFFER_SIZE - _size);
+            len = readSock(_ring_buffer + _size, ENConfig.RING_BUFFER_SIZE - _size);
         }
         if (len < 0)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                std::cout << ev.ident << "read edge mode block" << totalLen << std::endl;
+                std::cout << getEventFd(ev) << "read edge mode block" << totalLen << std::endl;
             }
             else if (errno == ECONNRESET)
             {
-                std::cout << ev.ident << "read data pause, remote conn reseted";
+                std::cout << getEventFd(ev) << "read data pause, remote conn reseted";
             }
             else
             {
-                std::cout  << ev.ident << "read data pause, err:" << errno << std::endl;
+                std::cout  << getEventFd(ev) << "read data pause, err:" << errno << std::endl;
             }
             return totalLen;
         }
@@ -489,13 +480,141 @@ int EllConn::readData(const struct kevent &ev)
     }
 }
 
-void EllConn::clearWriteBuffer(){
+template<typename TEvent>
+int EllConn<TEvent>::loopListenSock(TEvent*events, int size)
+{
+    if(!checkSock()){
+        return -1;
+    }
+    struct timespec ts = {0, 0};
+    int changen = kevent(_kq, nullptr, 0, events, size, &ts);
+    if (changen < 0)
+    {
+        perror("accept error");
+        close();
+        return -1;
+    }
+    if(changen == 0){
+        sleep(1);
+        return 0;
+    }
+    sockaddr_in client_addr;
+    socklen_t clientaddr_len = sizeof(client_addr);
+    if(changen > 0){
+        std::cout << "kqueue event len:" << changen << std::endl;
+    }
+    for (size_t i = 0; i < changen; i++)
+    {
+        Tevent ev = events[i];
+        uintptr_t currentfd = getEventFd(ev);
+
+        if (currentfd == getSock() && _isListenFd)
+        {
+            std::cout << "accept client" << currentfd << std::endl;
+            int clientfd = accept(_sockfd, (sockaddr *)&client_addr, &clientaddr_len);
+            if (clientfd < 0)
+            {
+                perror("accept err");
+            }
+            else
+            {
+                if (!acceptSock(clientfd, this))
+                {
+                    ::close(clientfd);
+                }
+            }
+        }
+        else if(getEventFilter(ev) == EVFILT_WRITE){
+            EllConn* ec = getClient(currentfd);
+            std::cout << std::this_thread::get_id() << " th " << i << " write data to:" << ec->getSock() << " ev " << &ev.udata << std::endl;
+            for (size_t i = 0; i < 10; i++)
+            {
+                int sent = ec->writeSingleData();
+                if(sent < 0){
+                    ec->close();
+                    EllConn<TEvent>::delClient(ec->getSock());
+                    break;
+                }else if(sent == 0){
+                    break;
+                }
+            }
+        }
+        else if(getEventFilter(ev) == EVFILT_READ)
+        {
+            if (getEventFlag(ev) | EV_EOF)
+            {
+                std::cout << " input has closed \n";
+                EllConn *ec = getClient(currentfd);
+                ec->close();
+                EllConn<TEvent>::delClient(currentfd);
+                continue;
+            }
+            if(getEventUdata(ev) != nullptr){
+                EventContext* currentEC = (EventContext*)ev.udata;
+                if(currentEC == nullptr){
+                    std::cout << "write data err, it may case memleek!" << std::endl;
+                    continue;
+                }
+                if(currentEC->socket_type == SOCKET_TYPE_PIPE){
+                    std::cout << "pipe get msg" << std::endl;
+                    char message[BUFFSIZE];
+                    bzero(&message, BUFFSIZE);
+                    ssize_t len = read(currentfd, message, BUFFSIZE);
+                    std::cout << "read pipe:" << std::string(message) << std::endl;
+                    EllConn* targetEcn = getClient(currentEC->targetfd);
+                    if(len < 0){
+                        std::cout << "pipe err:" << errno << std::endl;
+                        deleteReadEvent(&ev);
+                        ::close(currentfd);
+                        targetEcn->close(); // close socket
+                        ConnManager::delClient(currentEC->targetfd);
+                        continue;
+                    }else if(len == 0){
+                        std::cout << "pipe sender closed, so reader close" << std::endl;
+                        deleteReadEvent(&ev);
+                        ::close(currentfd); // close pipe
+                        targetEcn->close(); // close socket
+                        ConnManager::delClient(currentEC->targetfd);
+                        continue;
+                    }
+                    
+                    if(currentEC->targetfd != INVALID_SOCK){
+                        if(targetEcn == nullptr){
+                            std::cout << "write data to empty target" << std::endl;
+                            continue;
+                        }
+                        targetEcn->sendData(message, len);
+                    }
+                }
+                continue;
+            }
+            std::cout << "read data" << ev.ident << std::endl;
+            EllConn<TEvent>* ec = ConnManager::getClient(currentfd);
+            if(ec == nullptr){
+                std::cout << "client lost " << currentfd << std::endl;
+            }
+            if (ec->readData(ev) <= 0 || (ev.flags & EV_EOF))
+            {
+                ec->close();
+                ConnManager::::delClient(getSock());
+            }
+        }else{
+            std::cout << "unexpected event filter" << ev.filter << std::endl;
+        }
+    }
+    return changen;
+};
+
+
+template<typename TEvent>
+void EllConn<TEvent>::clearWriteBuffer(){
     if(_ec != nullptr){
         delete(_ec);
     }
 }
 
-std::ostream &operator<<(std::ostream &os, const EllConn &ec)
+template<typename TEvent>
+std::ostream &operator<<(std::ostream &os, const EllConn<TEvent> &ec)
 {
     os << &ec << "EllConn{_sockfd=" << ec._sockfd << ", ip:" << ec.getBindIp() << ", port:" << ec.getBindPort() << ", readev:" << ec._ev_list[0] << ", writeev:" << ec._ev_list[1] << ", isPipe:" << ec._sock_type << "}\n";
     return os;
