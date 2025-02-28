@@ -1,14 +1,4 @@
 #pragma once
-
-#include <iostream>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <string>
-#include <sys/event.h>
-#include <unordered_map>
-
 #define EXITSTR "EXIT"
 #define STOPSTR "STOP"
 #define BUFFSIZE 1024

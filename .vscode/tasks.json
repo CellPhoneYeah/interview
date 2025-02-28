@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "CMake: server",
+			"command": "cmake",
+			"args": [
+				"--build", "build",
+				"--target", "server",
+				"--parallel",
+				"--verbose"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": ["$gcc"],
+			"detail": "CMake template build task",
+			"options": {"cwd": "${workspaceFolder}"}
+		}
+	]
+}

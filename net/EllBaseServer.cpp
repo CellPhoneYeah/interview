@@ -1,22 +1,17 @@
 #include "EllBaseServer.h"
-#include <sys/event.h>
 #include <sstream>
+#include <iostream>
+#include "EllNetConfig.h"
+#include "EllConnBase.h"
 
 struct timespec EllBaseServer::ts = {0, 0};
 
 EllBaseServer::EllBaseServer()
 {
-    _kq = kqueue();
+    _evq = createEVQ();
     listened_addr.clear();
     listened_port = -1;
-    listened_eec = nullptr;
-}
-EllBaseServer::EllBaseServer(int kq)
-{
-    _kq = kq;
-    listened_addr.clear();
-    listened_port = -1;
-    listened_eec = nullptr;
+    listened_ecb = nullptr;
 }
 
 EllBaseServer::~EllBaseServer(){
@@ -27,46 +22,43 @@ EllBaseServer::~EllBaseServer(){
     }
 }
 
-void EllBaseServer::addConn(EllConn *ec)
+void EllBaseServer::addConn(EllConnBase *ecb)
 {
-    if (ec == nullptr)
+    if (ecb == nullptr)
     {
         return;
     }
-    if (ec->getSock() == INVALID_SOCK)
+    if (ecb->getSock() == INVALID_SOCK)
     {
         return;
     }
-    _connMap[ec->getSock()] = ec;
-    ec->bindKQ(_kq);
-    std::cout << "addConn" << ec->getSock() << " :" << *ec << std::endl;
+    _connMap[ecb->getSock()] = ecb;
+    ecb->bindEVQ(_evq);
+    std::cout << "addConn" << ecb->getSock() << " :" << ecb << std::endl;
 }
 void EllBaseServer::delConn(int connFd)
 {
-    EllConn *ec = _connMap[connFd];
-    if (ec == nullptr)
+    EllConnBase *ecb = _connMap[connFd];
+    if (ecb == nullptr)
     {
         _connMap.erase(connFd);
         return;
     }
-    std::cout << "delConn" << ec->getSock() << " :" << *ec << std::endl;
-    if (!ec->isClosed())
-    {
-        ec->close();
-    }
+    std::cout << "delConn" << ecb->getSock() << " :" << ecb << std::endl;
+    ecb->close();
     _connMap.erase(connFd);
-    delete (ec);
+    delete (ecb);
 }
-EllConn *EllBaseServer::getConn(int connFd)
+
+EllConnBase *EllBaseServer::getConn(int connFd)
 {
     return _connMap[connFd];
 }
 
 int EllBaseServer::handleReadEv(const struct kevent &ev)
 {
-    std::cout << "handleRead " << ev.ident << std::endl;
     int sockfd = ev.ident;
-    EllConn *ec = getConn(sockfd);
+    EllConnBase *ecb = getConn(sockfd);
     if (ec == nullptr)
     {
         return 0;

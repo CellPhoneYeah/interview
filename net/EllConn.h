@@ -84,5 +84,6 @@ public:
     virtual int loopEvent(TEvent* events, int size);
 
     virtual void* deleteReadEvent(TEvent*event) = 0;
+    virtual int newEVQ() = 0;
     void clearWriteBuffer();
 };

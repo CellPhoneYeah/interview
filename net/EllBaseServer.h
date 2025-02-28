@@ -1,5 +1,6 @@
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 
 #define LOOP_EVENT_NUM 64
 #define SYS_READ_BUFFER_SIZE 1024
@@ -14,9 +15,9 @@ private:
     std::string listened_addr;
     int listened_port;
     EllConnBase* listened_ecb;
+    virtual int createEVQ() = 0;
 public:
     EllBaseServer();
-    EllBaseServer(int evq);
     ~EllBaseServer();
     void addConn(EllConnBase *ecb);
     void delConn(int connFd);

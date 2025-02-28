@@ -1,8 +1,10 @@
 #include "utility.h"
-#include "user.h"
-#include "proto.h"
 #include "EllBaseServer.h"
 #include <thread>
+#include <strings.h>
+#include <iostream>
+#include <unistd.h>
+#include <cstring>
 
 void runServer(bool &isRunning){
     EllBaseServer *ebs = new EllBaseServer();
@@ -11,7 +13,7 @@ void runServer(bool &isRunning){
         return;
     }
     int loopCount = 0;
-    while(ebs->loopKQ() >= 0 && isRunning){
+    while(ebs->loopEVQ() >= 0 && isRunning){
         sleep(1);
         loopCount ++;
         if(loopCount % 20 == 0){
@@ -26,7 +28,7 @@ void runServer(bool &isRunning){
 int main()
 {
     bool isRunning = true;
-    thread th(runServer, std::ref(isRunning));
+    std::thread th(runServer, std::ref(isRunning));
     th.detach();
     while (1)
     {

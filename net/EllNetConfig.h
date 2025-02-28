@@ -1,4 +1,4 @@
-#define INVALID_SOCK (~0);
+#define INVALID_SOCK (~0)
 
 typedef struct EllNetConfig{
 public:
