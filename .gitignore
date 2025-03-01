@@ -3,3 +3,5 @@ server
 client
 leetcode/leetcode
 build
+*.o
+*.a

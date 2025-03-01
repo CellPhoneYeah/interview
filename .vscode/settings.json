@@ -60,6 +60,9 @@
         "span": "cpp",
         "stop_token": "cpp",
         "variant": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "condition_variable": "cpp",
+        "unordered_set": "cpp",
+        "mutex": "cpp"
     }
 }

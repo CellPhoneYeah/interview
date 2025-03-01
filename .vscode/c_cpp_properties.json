@@ -5,10 +5,12 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/common/**",
-                "${workspaceFolder}/net/**"
+                "${workspaceFolder}/net/**",
+                "${workspaceFolder}/net/srcs/**",
+                "/usr/include/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/gcc-13",
+            "compilerPath": "/usr/bin/g++-13",
             "intelliSenseMode": "linux-gcc-x64",
             "cStandard": "c17",
             "cppStandard": "c++17"

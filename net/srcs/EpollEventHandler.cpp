@@ -1,6 +1,7 @@
 #include "EpollEventHandler.h"
 #include <iostream>
 #include <unistd.h>
+#include "EpollEventContext.h"
 
 
 int EpollEventHandler::start()
@@ -9,7 +10,7 @@ int EpollEventHandler::start()
     return event_fd;
 }
 
-int EpollEventHandler::add_event(int fd, EventType et, EventCallback ecb)
+int EpollEventHandler::add_event(int fd, EventType et)
 {
     struct epoll_event ev;
     ev.events = 0;
@@ -25,11 +26,11 @@ int EpollEventHandler::add_event(int fd, EventType et, EventCallback ecb)
     {
         epoll_ctl(event_fd, EPOLL_CTL_MOD, fd, &ev);
     }
-    if(events_cb.find(fd) == events_cb.end()){
-        events_cb[fd] = std::unordered_map<EventType, EventCallback>();
-        events_cb[fd][et] = ecb;
+    if(events_registered.find(fd) == events_registered.end()){
+        events_registered[fd] = std::vector<bool>({false, false, false});
+        events_registered[fd][et] = true;
     }else{
-        events_cb[fd][et] = ecb;
+        events_registered[fd][et] = true;
     }
     return 0;
 }
@@ -37,7 +38,7 @@ int EpollEventHandler::add_event(int fd, EventType et, EventCallback ecb)
 void EpollEventHandler::del_event(int fd)
 {
     epoll_ctl(event_fd, EPOLL_CTL_DEL, fd, nullptr);
-    events_cb.erase(fd);
+    events_registered.erase(fd);
 }
 
 int EpollEventHandler::wait_event()
@@ -54,17 +55,18 @@ int EpollEventHandler::wait_event()
         for (int i = 0; i < eventn; i++)
         {
             epoll_event ev = events[i];
-            auto it = events_cb.find(ev.data.fd);
-            if(it == nullptr){
-                std::cout << "epoll cannot find event cb list for ev " << ev.data.fd << std::endl;
+            int currentFd = ev.data.fd;
+            std::unordered_map<int, std::vector<bool>>::const_iterator registered = events_registered.find(currentFd);
+            if(registered == events_registered.end()){
+                std::cout << "epoll cannot find event listening list for ev " << currentFd << std::endl;
                 continue;
             }
-            EventType et = EpollEvent2Event(EventRead);
-            if(it->second[et] == nullptr){
-                std::cout << "epoll cannot find event cb for ev " << ev.data.fd << " event type " << et << std::endl;
+            EventType et = EpollEvent2Event(ev.events);
+            if(!registered->second[et]){
+                std::cout << "epoll cannot find event listening for ev " << currentFd << " event type " << et << std::endl;
                 continue;
             }
-            it->second[et](ev.data.fd, et);
+            handle_event(currentFd, ev);
         }
     }
     close(event_fd);
@@ -74,16 +76,17 @@ int EpollEventHandler::wait_event()
 
 EventType EpollEventHandler::EpollEvent2Event(int epollEvent)
 {
-    switch (epollEvent)
-    {
-    case EPOLLIN:
+    if(epollEvent & EPOLLIN){
         return EventRead;
-    case EPOLLOUT:
-        return EventWrite;
-    case EPOLLERR:
-        return EventError;
-    
-    default:
-        return EventError;
     }
+    if(epollEvent & EPOLLOUT){
+        return EventWrite;
+    }
+    return EventError;
+}
+
+void EpollEventHandler::handle_event(int fd, epoll_event &ev)
+{
+    EpollEventContext* eec = (EpollEventContext*)ev.data.ptr;
+    eec->handle_event(&ev);
 }
