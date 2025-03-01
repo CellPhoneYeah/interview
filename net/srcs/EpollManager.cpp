@@ -6,6 +6,7 @@
 #include "EpollEventContext.h"
 #include <unistd.h>
 #include <fcntl.h>
+std::unordered_map<int, EpollEventContext*> EpollManager::contexts;
 
 void EpollManager::addContext(EpollEventContext * eec)
 {
@@ -24,6 +25,11 @@ EpollEventContext* EpollManager::getContext(int fd)
     return contexts[fd];
 }
 
+EpollManager::EpollManager()
+{
+    init();
+}
+
 int EpollManager::init()
 {
     epoll_fd = epoll_create1(0);
@@ -36,6 +42,7 @@ int EpollManager::start_listen(std::string ip_str, int port)
     socklen_t len = sizeof(addr);
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(ip_str.c_str());
+    
     addr.sin_port = htons(port);
     int listenfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if(listenfd < 0){
@@ -47,17 +54,29 @@ int EpollManager::start_listen(std::string ip_str, int port)
         return -2;
     }
 
+    if(addr.sin_addr.s_addr == INADDR_NONE){
+        std::cout << "invalid ip addr " << ip_str << std::endl;
+        close(listenfd);
+        return -4;
+    }
+
+    if(listen(listenfd, 0) < 0){
+        std::cout << "listen failed " << errno << std::endl;
+        return -5;
+    }
+
     struct epoll_event ev;
-    ev.data.fd = listenfd;
     EpollEventContext* newCtx = new EpollEventContext(listenfd, true);
-    this->addContext(newCtx);
-    int flag = EPOLLIN | EPOLLET;
-    if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, flag, &ev) < 0){
-        this->delContext(epoll_fd);
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.ptr = newCtx;
+    if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listenfd, &ev) < 0){
         delete(newCtx);
-        close(epoll_fd);
+        close(listenfd);
+        std::cout << "stop listen fd";
         return -3;
     }
+    this->addContext(newCtx);
+    std::cout << listenfd << " listen to fd " << std::endl;
     return 0;
 }
 
@@ -79,6 +98,12 @@ int EpollManager::loop()
             std::cout << "epoll wait err:" << errno << std::endl;
             break;
         }
+        if(eventn == 0){
+            sleep(1);
+            std::cout << "no event ..." << std::endl;
+            continue;
+        }
+        std::cout << "event n " << eventn << std::endl;
         for (int i = 0; i < eventn; i++)
         {
             struct epoll_event ev = event_list[i];
@@ -92,14 +117,13 @@ int EpollManager::loop()
             }else if(ev.events & EPOLLOUT){
                 do_send(ev, ctx);
             }else if(ev.events & EPOLLERR){
-                std::cout << "epoll err " << ev.data.fd << std::endl;
-                close_fd(ev.data.fd);
+                std::cout << "epoll err " << ctx->getFd() << std::endl;
+                close_fd(ctx->getFd());
             }else if(ev.events & EPOLLHUP){
-                std::cout << "remote closed sock " << ev.data.fd << std::endl;
-                close_fd(ev.data.fd);
+                std::cout << i << " epoll wait found remote closed sock " << ctx->getFd() << std::endl;
+                close_fd(ctx->getFd());
             }
         }
-        
     }
     return 0;
 }
@@ -109,9 +133,10 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     int flag = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLERR;
-    ctx->set_noblocking(ev.data.fd);
+    int currentFd = ctx->getFd();
+    ctx->set_noblocking(currentFd);
     while(1){
-        int newFd = accept(ev.data.fd, (sockaddr*)&addr, &len);
+        int newFd = accept(currentFd, (sockaddr*)&addr, &len);
         if(newFd < 0){
             if(errno == EAGAIN || errno == EWOULDBLOCK){
                 // 所有连接处理完
@@ -124,12 +149,12 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
             }
             if(errno == EMFILE){
                 std::cout << "file fd limit" << std::endl;
-                close_fd(ev.data.fd);
+                close_fd(currentFd);
                 return;
             } 
             if(errno == ENFILE){
                 std::cout << "out of fd " << std::endl;
-                close_fd(ev.data.fd);
+                close_fd(currentFd);
                 return;
             }
             if(errno == EINTR){
@@ -137,11 +162,10 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
                 continue;
             }
             std::cout << "unexpect err:" << errno << std::endl;
-            close_fd(ev.data.fd);
+            close_fd(currentFd);
             return;
         }else{
             struct epoll_event ev;
-            ev.data.fd = newFd;
             EpollEventContext* newCtx = new EpollEventContext(newFd, false);
             ev.data.ptr = newCtx;
             ev.events = flag;

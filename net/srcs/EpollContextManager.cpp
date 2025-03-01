@@ -1,5 +1,7 @@
 #include "EpollContextManager.h"
 
+std::unordered_map<int, EpollEventContext*> EpollContextManager::contexts;
+
 void EpollContextManager::addContext(EpollEventContext * eec)
 {
     contexts[eec->getFd()] = eec;

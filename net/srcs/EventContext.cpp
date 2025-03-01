@@ -24,3 +24,7 @@ void EventContext::readBytes(int byte_len)
     readBuffer.erase(readBuffer.begin(), readBuffer.begin() + offsetPos);
     offsetPos = 0;
 }
+
+EventContext::~EventContext(){
+    std::cout << "release EventContext" << ownfd << std::endl;
+}

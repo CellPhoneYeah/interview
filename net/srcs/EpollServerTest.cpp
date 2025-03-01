@@ -7,8 +7,11 @@ bool running;
 
 void startServer(){
     EpollManager *emgr = new EpollManager();
-    emgr->init();
-    emgr->start_listen("127.0.0.1", 8088);
+    int listenRet = 0;
+    if((listenRet = emgr->start_listen("127.0.0.1", 8088)) < 0){
+        std::cout << "listen failed " << listenRet << std::endl;
+        return;
+    }
     while(1){
         if(running){
             emgr->loop();
@@ -17,6 +20,7 @@ void startServer(){
             std::cout << "stop server" << std::endl;
         }
     }
+    delete(emgr);
 }
 
 int main(){
@@ -27,7 +31,7 @@ int main(){
     char str[1024];
     while(1){
         fgets(str, 1024, stdin);
-        if(strcmp(str, "stop")){
+        if(strcmp(str, "stop") == 0){
             running = false;
             break;
         }

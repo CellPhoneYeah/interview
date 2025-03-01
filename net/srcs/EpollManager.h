@@ -12,7 +12,7 @@ public:
     static void delContext(int fd);
     static EpollEventContext* getContext(int fd);
 
-    int init();
+    EpollManager();
     int start_listen(std::string addr, int port);
     int connect_to(std::string addr, int port);
     int loop();
@@ -22,6 +22,7 @@ public:
     void close_fd(int fd);
 private:
     static std::unordered_map<int, EpollEventContext*> contexts;
+    int init();
     int epoll_fd;
     struct epoll_event event_list[MAX_EPOLL_EVENT_NUM];
     std::unordered_set<int> listening_fds;

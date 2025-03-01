@@ -1,51 +1,70 @@
+# CC = gcc
+# CPP = g++
+# RM = rm -f
+# MKDIR = mkdir -p
+
+# ifeq ($(debug),1)
+# 	CFLAGS = -I ./srcs -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread
+# else
+# 	CFLAGS = -I ./srcs -O2 -fexceptions -fPIC -DLINUX -lpthread
+# endif
+
+# BINPATH = ./bin
+# CPPPATH = ./srcs
+# OBJSPATH = ./objs
+# CPPFILES = $(foreach dir, $(CPPPATH), $(wildcard $(dir)/*.cpp))
+# $(info cppfile $(CPPFILES))
+# OBJS = $(patsubst %.cpp, $(OBJSPATH)/%.o,$(notdir $(CPPFILES)))
+# $(info OBJS $(OBJS))
+# TARGET = $(BINPATH)/test
+
+# $(OBJSPATH) $(BINPATH):
+# 	$(MKDIR) $@
+
+# $(OBJSPATH)/%.o: $(CPPPATH)/%.cpp | $(OBJSPATH)
+# 	$(CPP) -c $(CFLAGS) $< -o $@
+
+# $(TARGET): $(OBJS) | $(BINPATH)
+# 	$(CPP) $(CFLAGS) $(OBJS) -o $(TARGET)
+
+# .PHONY : clean
+# clean:
+# 	-$(RM) $(TARGET)
+# 	-$(RM) $(OBJSPATH)/*.o 
+
 CC = gcc
 CPP = g++
 RM = rm -f
+MKDIR = mkdir -p
 
-CFLAGS = -I ./srcs -O0 -shared -g -Wall -fexceptions -fPIC -DLINUX -lpthread
+ifeq ($(debug),1)
+    CFLAGS = -I ./srcs -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread
+else
+    CFLAGS = -I ./srcs -O2 -fexceptions -fPIC -DLINUX -lpthread
+endif
 
-SRCS = ./srcs
+BINPATH = ./bin
+CPPPATH = ./srcs
 OBJSPATH = ./objs
-TARGET = ./test
+CPPFILES = $(foreach dir, $(CPPPATH), $(wildcard $(dir)/*.cpp))
+$(info cppfile $(CPPFILES))
+OBJS = $(patsubst %.cpp, $(OBJSPATH)/%.o,$(notdir $(CPPFILES)))
+$(info OBJS $(OBJS))
+TARGET = $(BINPATH)/test
 
-$(OBJSPATH)/%.o: $(SRCS)/%.cpp
-	$(CPP) $(CFLAGS) $< -o $@
+# 生成目标可执行文件的规则
+$(TARGET): $(OBJS) | $(BINPATH)
+	$(CPP) $(CFLAGS) $(OBJS) -o $(TARGET)
 
-$(TARGET):$(OBJSPATH)/*.o
-	$(CPP) $(CFLAGS) $(OBJSPATH)/*.o -o $(TARGET)
+$(OBJSPATH) $(BINPATH):
+	$(MKDIR) $@
 
+# 生成 .o 文件的规则
+$(OBJSPATH)/%.o: $(CPPPATH)/%.cpp | $(OBJSPATH)
+	$(CPP) -c $(CFLAGS) $< -o $@
 
-# BIN = ./bin
-# OBJDIR = ./objs
-# SRCS = ./srcs
-# CPPFILES = $(wildcard $(SRCS)/*.cpp)
-# $(info CPPFILES are $(CPPFILES))
-# OBJFILES = $(patsubst $(SRCS)/%.cpp, $(OBJDIR)/%.o, $(CPPFILES))
-# $(info OBJFILES are $(OBJFILES))
-
-# TARGET = $(BIN)/EpollManagerTest
-# $(info TARGET are $(TARGET))
-
-# $(OBJDIR):
-# 	mkdir -p ./$@
-
-# $(BIN):
-# 	mkdir -p ./$@
-
-# $(OBJDIR)/%.o: $(SRCS)/%.cpp
-# 	$(CPP) -c $(CFLAGS) $< -o $@
-	
-# $(OBJDIR)/%.o: $(SRCS)/%.cpp
-# 	$(CPP) -c $(CFLAGS) $< -o $@
-
-# $(TARGET): $(BIN) $(OBJDIR) $(OBJFILES)
-# 	$(CPP) $(CFLAGS) $(OBJFILES) -o $(TARGET)
-
-# $(TARGET): $(BIN) $(OBJDIR) $(OBJFILES)
-# 	$(CPP) $(CFLAGS) $(OBJFILES) -o $(TARGET)
 
 .PHONY : clean
 clean:
 	-$(RM) $(TARGET)
 	-$(RM) $(OBJSPATH)/*.o 
-	-$(RM) $(SRCS)/*.o 
