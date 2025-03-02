@@ -1,15 +1,18 @@
 #include "EventContext.h"
 #include <string>
 #include <iostream>
+#include "EpollManager.h"
 
 EventContext::EventContext(int fd){
     ownfd = fd;
+    readBuffer.resize(EpollManager::MAX_EPOLL_READ_SIZE);
 }
 
 EventContext::EventContext(int fd, bool isListen)
 {
     ownfd = fd;
     listening = isListen;
+    readBuffer.resize(EpollManager::MAX_EPOLL_READ_SIZE);
 }
 
 void EventContext::clearSendQ()

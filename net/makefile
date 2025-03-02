@@ -50,11 +50,17 @@ CPPFILES = $(foreach dir, $(CPPPATH), $(wildcard $(dir)/*.cpp))
 $(info cppfile $(CPPFILES))
 OBJS = $(patsubst %.cpp, $(OBJSPATH)/%.o,$(notdir $(CPPFILES)))
 $(info OBJS $(OBJS))
-TARGET = $(BINPATH)/test
+SERVERFILE = ./EpollServerTest.cpp
+CLIENTFILE = ./EpollClientTest.cpp
+SERVER = $(BINPATH)/server
+CLIENT = $(BINPATH)/client
 
 # 生成目标可执行文件的规则
-$(TARGET): $(OBJS) | $(BINPATH)
-	$(CPP) $(CFLAGS) $(OBJS) -o $(TARGET)
+$(SERVER): $(OBJS) | $(BINPATH) $(CLIENT)
+	$(CPP) $(CFLAGS) $(OBJS) $(SERVERFILE) -o $(SERVER)
+
+$(CLIENT): $(OBJS) | $(BINPATH)
+	$(CPP) $(CFLAGS) $(OBJS) $(CLIENTFILE) -o $(CLIENT)
 
 $(OBJSPATH) $(BINPATH):
 	$(MKDIR) $@
@@ -66,5 +72,6 @@ $(OBJSPATH)/%.o: $(CPPPATH)/%.cpp | $(OBJSPATH)
 
 .PHONY : clean
 clean:
-	-$(RM) $(TARGET)
+	-$(RM) $(SERVER)
+	-$(RM) $(CLIENT)
 	-$(RM) $(OBJSPATH)/*.o 

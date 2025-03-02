@@ -2,6 +2,7 @@
 #define EVENT_CONTEXT_H
 #include <queue>
 #include <vector>
+#define MAX_READ_BUFFER_SIZE 1024
 
 enum HANDLE_EVENT_CODE{
     HANDLE_EVENT_CODE_OK,
@@ -16,7 +17,7 @@ enum HANDLE_EVENT_CODE{
 };
 
 class EventContext{
-    protected:
+protected:
     int ownfd = 0;
     int socket_type = 0;
     bool listening = false;

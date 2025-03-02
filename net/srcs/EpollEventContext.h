@@ -10,6 +10,7 @@ public:
     ~EpollEventContext() override;
     int handle_event(void*event) override;
     void set_noblocking(int fd);
+    void pushMsgQ(const char* msg, int size);
 
 private:
     int handle_read_event(epoll_event*event);

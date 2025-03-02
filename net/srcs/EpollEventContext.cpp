@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include "EpollContextManager.h"
 #include <string.h>
+#include "EpollEventContext.h"
 
 int EpollEventContext::handle_event(void *event)
 {
@@ -35,11 +36,8 @@ int EpollEventContext::handle_read_event(epoll_event *event)
             set_noblocking(newFd);
             EpollEventContext* newContext = new EpollEventContext(newFd);
             EpollContextManager::addContext(newContext);
-            int flag = fcntl(newFd, F_GETFL, 0);
-            flag |= EPOLLIN | EPOLLET; // 边缘触发
-            fcntl(newFd, F_SETFL, flag);
+            int flag = EPOLLOUT | EPOLLET; // 边缘触发
             event->events = flag;
-            event->data.fd = newFd;
             event->data.ptr = newContext;
             epoll_ctl(ownfd, EPOLL_CTL_ADD, newFd, event);
         }
@@ -82,6 +80,16 @@ void EpollEventContext::set_noblocking(int fd)
     fcntl(fd, F_SETFL, flag | O_NONBLOCK);
 }
 
+void EpollEventContext::pushMsgQ(const char *msg, int size)
+{
+    if(sendQ.size() >= 1024){
+        std::cout << "send queue full " << ownfd << std::endl;
+        return;
+    }
+    sendQ.push(std::vector<char>(msg, msg + size));
+    std::cout << sendQ.size() << " insert send queue success " << ownfd << " : " << std::string(msg) << std::endl;
+}
+
 void EpollEventContext::process_data(char *data, int size)
 {
     std::cout << "process data" << std::string(data) << std::endl;
@@ -90,6 +98,12 @@ void EpollEventContext::process_data(char *data, int size)
 void EpollEventContext::modify_ev(int fd, int flag, bool enable)
 {
     int current_flag = fcntl(fd, F_GETFL, 0);
+    if(enable){
+        current_flag &= flag;
+    }else{
+        current_flag &= ~flag;
+    }
+    fcntl(fd, F_SETFL, current_flag);
 }
 
 EpollEventContext::~EpollEventContext(){
