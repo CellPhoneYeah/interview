@@ -59,6 +59,7 @@ int main(){
     for(int i = 0; i < 10; i++){
         std::thread th(RunClient, i);
         th.detach();
+        sleep(2);
     }
     while(1){
         char str[1024];
