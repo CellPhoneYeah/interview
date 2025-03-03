@@ -4,4 +4,4 @@ ifeq ($(debug), 1)
 else
 	cd ./net && make clean && make
 endif
-$(info, "compile finished.")
+$(info "compile finished.")

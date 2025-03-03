@@ -45,8 +45,8 @@ int main(){
     th.detach();
     char str[1024];
     while(1){
-        fgets(str, 1024, stdin);
-        if(strcmp(str, "stop") == 0){
+        char* ret = fgets(str, 1024, stdin);
+        if(ret != nullptr && strcmp(str, "stop") == 0){
             running = false;
             break;
         }

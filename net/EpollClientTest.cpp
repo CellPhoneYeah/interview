@@ -20,11 +20,11 @@ void sendMsg(int clientfd){
             oss.str("");
             oss << "hello " << i;
             std::string str = oss.str();
-            std::cout << "try send msg " << clientfd << std::endl;
-            if(!emgr->sendMsg(clientfd, str.c_str(), str.size())){
-                std::cout << " send msg failed " << clientfd << std::endl;
-                break;
-            }
+            // std::cout << "try send msg " << clientfd << std::endl;
+            // if(!emgr->sendMsg(clientfd, str.c_str(), str.size())){
+            //     std::cout << " send msg failed " << clientfd << std::endl;
+            //     break;
+            // }
             i++;
             sleep(1);
         }
@@ -36,7 +36,8 @@ void sendMsg(int clientfd){
     }
 }
 
-void RunClient(){
+void RunClient(int id){
+    std::cout << "start client " << id << std::endl;
     int clientfd = emgr->connect_to("127.0.0.1", 8088);
     isRun = true;
     std::thread clientth(sendMsg, clientfd);
@@ -47,7 +48,7 @@ void RunClient(){
         }
         else
         {
-            std::cout << "stop client \n";
+            std::cout << "stop client " << id << std::endl;
             break;
         }
     }
@@ -55,13 +56,14 @@ void RunClient(){
 }
 
 int main(){
-    std::thread th(RunClient);
-    th.detach();
-    std::cout << "start client ...\n";
+    for(int i = 0; i < 10; i++){
+        std::thread th(RunClient, i);
+        th.detach();
+    }
     while(1){
         char str[1024];
-        fgets(str, 1024, stdin);
-        if(strcmp(str, "stop") == 0){
+        char* ret = fgets(str, 1024, stdin);
+        if(ret != nullptr && strcmp(str, "stop") == 0){
             isRun = false;
             break;
         }

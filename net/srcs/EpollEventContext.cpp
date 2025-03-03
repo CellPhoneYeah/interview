@@ -107,5 +107,5 @@ void EpollEventContext::modify_ev(int fd, int flag, bool enable)
 }
 
 EpollEventContext::~EpollEventContext(){
-    std::cout << "release EpollEventContext :" << ownfd << std::endl;
+    // std::cout << "release EpollEventContext :" << ownfd << std::endl;
 }

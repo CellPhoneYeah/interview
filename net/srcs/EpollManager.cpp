@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include "EpollEventContext.h"
 #include <unistd.h>
+#include <ctime>
 std::unordered_map<int, EpollEventContext*> EpollManager::contexts;
 
 void EpollManager::addContext(EpollEventContext * eec)
@@ -17,6 +18,7 @@ void EpollManager::delContext(int fd)
     if(contexts[fd] != nullptr){
         delete(contexts[fd]);
     }
+    std::cout << "del context " << fd << std::endl;
     contexts[fd] = nullptr;
 }
 EpollEventContext* EpollManager::getContext(int fd)
@@ -86,6 +88,7 @@ int EpollManager::start_listen(std::string ip_str, int port)
         return -3;
     }
     std::cout << listenfd << " listen to fd " << std::endl;
+    last_tick = std::time(nullptr);
     return 0;
 }
 
@@ -95,7 +98,8 @@ int EpollManager::connect_to(std::string ip_str, int port)
     addr.sin_family = AF_INET;
     inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr);
     addr.sin_port = htons(port);
-    int client_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    // int client_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    int client_fd = socket(AF_INET, SOCK_STREAM, 0); // 用异步有可能导致client_fd被其它线程占用，需要处理加锁处理
     socklen_t addrlen = sizeof(addr);
     int ret = connect(client_fd, (const sockaddr*)&addr, addrlen);
     if(ret == -1 && errno != EINPROGRESS){
@@ -122,6 +126,7 @@ int EpollManager::connect_to(std::string ip_str, int port)
             epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
         }
         addContext(ctx);
+        std::cout << "waiting connect " << client_fd << std::endl;
     }
     
     return client_fd;
@@ -130,6 +135,11 @@ int EpollManager::connect_to(std::string ip_str, int port)
 int EpollManager::loop()
 {
     while(1){
+        time_t current_time = std::time(nullptr);
+        if(std::difftime(current_time, last_tick) > 10){
+            last_tick = current_time;
+            std::cout << " connection nums :" << contexts.size() << std::endl; 
+        }
         int eventn = epoll_wait(epoll_fd, event_list, MAX_EPOLL_EVENT_NUM, 0); // 立刻返回结果，不阻塞
         if(eventn < 0){
             if(errno == EINTR){
@@ -145,7 +155,7 @@ int EpollManager::loop()
             // std::cout << "no event ..." << std::endl;
             return 0;
         }
-        std::cout << "event n " << eventn << std::endl;
+        // std::cout << "event n " << eventn << std::endl;
         for (int i = 0; i < eventn; i++)
         {
             struct epoll_event ev = event_list[i];
@@ -185,12 +195,14 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
     socklen_t len = sizeof(addr);
     int flag = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLERR;
     int currentFd = ctx->getFd();
-    std::cout << "handle accept " << currentFd << std::endl;
-    ctx->set_noblocking(currentFd);
+    // ctx->set_noblocking(currentFd);
     while(1){
+        std::cout << "handle accept " << std::endl;
         int newFd = accept(currentFd, (sockaddr*)&addr, &len);
+        std::cout << "handle accept newfd " << newFd << "err" << std::endl;
         if(newFd < 0){
             if(errno == EAGAIN || errno == EWOULDBLOCK){
+                std::cout << "done all accept " << std::endl;
                 // 所有连接处理完
                 return;
             }
@@ -294,7 +306,7 @@ void EpollManager::do_conn(epoll_event &ev, EpollEventContext *ctx)
         return;
     }
     if(error != 0){
-        std::cerr << "connecting failed " << strerror(error) << std::endl;
+        std::cerr << "connecting failed " << currentFd << " " << strerror(error) << std::endl;
         close_fd(currentFd);
         return;
     }
@@ -371,9 +383,9 @@ void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
 
 void EpollManager::close_fd(int fd)
 {
-    EpollManager::delContext(fd);
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
     close(fd);
+    EpollManager::delContext(fd);
 }
 
 bool EpollManager::sendMsg(int fd, const char *msg, int size)
@@ -387,6 +399,6 @@ bool EpollManager::sendMsg(int fd, const char *msg, int size)
     ev.data.ptr = ctx;
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
     epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
-    std::cout << " after push queue " << ctx->sendQ.size() << std::endl;
+    // std::cout << " after push queue " << ctx->sendQ.size() << std::endl;
     return true;
 }

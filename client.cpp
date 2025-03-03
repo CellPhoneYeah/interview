@@ -8,7 +8,11 @@ void sendCmd(int pipe_fd, bool &isworking, int&islogin, int& islogout, EllBaseSe
     struct Login login;
     std::cout << "input name:";
     char name[32];
-    fgets(name, 32, stdin);
+    char* ret = fgets(name, 32, stdin);
+    if(ret == nullptr){
+        std::cout << " insert name failed\n";
+        return;
+    }
     for (int i = 0; i < 32; i++)
     {
         if (name[i] == '\n')
@@ -18,7 +22,11 @@ void sendCmd(int pipe_fd, bool &isworking, int&islogin, int& islogout, EllBaseSe
     }
     std::cout << "input password:";
     char password[32];
-    fgets(password, 32, stdin);
+    ret = fgets(password, 32, stdin);
+    if(ret == nullptr){
+        std::cout << " insert password failed\n";
+        return;
+    }
     
     std::strcpy(login.name, name);
     std::strcpy(login.password, password);
