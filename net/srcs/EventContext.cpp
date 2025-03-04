@@ -23,7 +23,7 @@ void EventContext::clearSendQ()
 
 void EventContext::readBytes(int byte_len)
 {
-    // std::cout << std::string(readBuffer.data()) << std::endl;
+    std::cout << std::string(readBuffer.data()) << std::endl;
     readBuffer.erase(readBuffer.begin(), readBuffer.begin() + offsetPos);
     offsetPos = 0;
 }

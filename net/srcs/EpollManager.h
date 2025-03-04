@@ -29,6 +29,5 @@ private:
     int epoll_fd;
     struct epoll_event event_list[MAX_EPOLL_EVENT_NUM];
     std::unordered_set<int> listening_fds;
-    std::unordered_set<int> connecting_fds;
     time_t last_tick;
 };

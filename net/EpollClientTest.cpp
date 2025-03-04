@@ -36,19 +36,14 @@ void sendMsg(int clientfd){
     }
 }
 
-void RunClient(int id){
-    std::cout << "start client " << id << std::endl;
-    int clientfd = emgr->connect_to("127.0.0.1", 8088);
-    isRun = true;
-    std::thread clientth(sendMsg, clientfd);
-    clientth.detach();
+void RunClient(){
     while(1){
         if(isRun){
             emgr->loop();
         }
         else
         {
-            std::cout << "stop client " << id << std::endl;
+            std::cout << "stop client loop " << std::endl;
             break;
         }
     }
@@ -56,10 +51,14 @@ void RunClient(int id){
 }
 
 int main(){
+    isRun = true;
+    std::thread th(RunClient);
+    th.detach();
     for(int i = 0; i < 10; i++){
-        std::thread th(RunClient, i);
-        th.detach();
-        sleep(2);
+        std::cout << "start client " << i << std::endl;
+        int clientfd = emgr->connect_to("127.0.0.1", 8088);
+        // std::thread clientth(sendMsg, clientfd);
+        // clientth.detach();
     }
     while(1){
         char str[1024];

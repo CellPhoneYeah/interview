@@ -106,6 +106,17 @@ void EpollEventContext::modify_ev(int fd, int flag, bool enable)
     fcntl(fd, F_SETFL, current_flag);
 }
 
-EpollEventContext::~EpollEventContext(){
+EpollEventContext::EpollEventContext(int fd) : EventContext(fd)
+{
+    connecting = false;
+}
+
+EpollEventContext::EpollEventContext(int fd, bool listening): EventContext(fd, listening)
+{
+    connecting = false;
+}
+
+EpollEventContext::~EpollEventContext()
+{
     // std::cout << "release EpollEventContext :" << ownfd << std::endl;
 }

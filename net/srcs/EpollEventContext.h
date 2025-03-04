@@ -5,8 +5,8 @@
 
 class EpollEventContext: public EventContext{
 public:
-    EpollEventContext(int fd): EventContext(fd){}
-    EpollEventContext(int fd, bool listening): EventContext(fd, listening){}
+    EpollEventContext(int fd);
+    EpollEventContext(int fd, bool listening);
     ~EpollEventContext() override;
     int handle_event(void*event) override;
     void set_noblocking(int fd);

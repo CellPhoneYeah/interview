@@ -21,6 +21,7 @@ protected:
     int ownfd = 0;
     int socket_type = 0;
     bool listening = false;
+    bool connecting = false;
     public:
     std::queue<std::vector<char> > sendQ;
     void readBytes(int byte_len);
@@ -32,6 +33,9 @@ protected:
     virtual int handle_event(void* event) = 0;
     int getFd(){return ownfd;}
     bool isListening(){return listening;}
+    bool isConnecting(){return connecting;}
     void clearSendQ();
+    void connectFinish(){connecting = false;}
+    void connectStart(){connecting = true;}
 };
 #endif

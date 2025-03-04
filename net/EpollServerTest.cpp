@@ -4,6 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include <atomic>
+#include <spdlog/spdlog.h>
 
 std::atomic<bool> running;
 EpollManager *emgr = new EpollManager();
@@ -30,6 +31,7 @@ void sigintHandler(int sigint){
 }
 
 int main(){
+    spdlog::info("test spdlog!!!");
     struct sigaction sa;
     sa.sa_handler = sigintHandler;
     sigemptyset(&sa.sa_mask);

@@ -4,9 +4,9 @@ RM = rm -f
 MKDIR = mkdir -p
 
 ifeq ($(debug),1)
-    CFLAGS = -I ./srcs -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread
+    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread -L../libs -lspdlog
 else
-    CFLAGS = -I ./srcs -O2 -fexceptions -fPIC -DLINUX -lpthread
+    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O2 -fexceptions -fPIC -DLINUX -lpthread -L../libs -lspdlog
 endif
 
 BINPATH = ./bin

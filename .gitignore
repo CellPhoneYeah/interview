@@ -4,5 +4,6 @@ client
 leetcode/leetcode
 build
 *.o
+*.so
 *.a
 */bin/
