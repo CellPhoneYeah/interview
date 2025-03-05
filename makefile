@@ -1,8 +1,13 @@
 all:
 # ifeq ($(debug), 1)
-	cd ./3rd && make clean && make debug=1
-	cd ./net && make clean && make debug=1
+	cd ./3rd && make
+	cd ./net && make debug=1
+$(info "compile finished.")
 # else
 # 	cd ./net && make clean && make
 # endif
-$(info "compile finished.")
+
+.PHONY : clean
+clean:
+	cd ./3rd && make clean
+	cd ./net && make clean

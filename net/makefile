@@ -2,11 +2,12 @@ CC = gcc
 CPP = g++
 RM = rm -f
 MKDIR = mkdir -p
+3RD_LIBS_PATH = ../libs
 
 ifeq ($(debug),1)
-    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread -L../libs -lspdlog
+    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O0 -g -Wall -fexceptions -fPIC -DLINUX -lpthread -L$(3RD_LIBS_PATH) -lspdlog
 else
-    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O2 -fexceptions -fPIC -DLINUX -lpthread -L../libs -lspdlog
+    CFLAGS = -I ./srcs -I ../3rd/spdlog/include -O2 -fexceptions -fPIC -DLINUX -lpthread -L$(3RD_LIBS_PATH) -lspdlog
 endif
 
 BINPATH = ./bin

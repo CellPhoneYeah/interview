@@ -6,6 +6,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <atomic>
+#include <spdlog/spdlog.h>
 
 std::atomic<bool> isRun = false;
 EpollManager *emgr = new EpollManager();
@@ -14,7 +15,7 @@ void sendMsg(int clientfd){
     sleep(5);
     int i = 0;
     std::ostringstream oss;
-    std::cout << isRun << " run send msg\n";
+    spdlog::info(" run send msg {}", i);
     while(1){
         if(isRun){
             oss.str("");
@@ -30,7 +31,7 @@ void sendMsg(int clientfd){
         }
         else
         {
-            std::cout << "stop client sender \n";
+            spdlog::info("stop client sender ");
             break;
         }
     }
@@ -43,7 +44,7 @@ void RunClient(){
         }
         else
         {
-            std::cout << "stop client loop " << std::endl;
+            spdlog::info("stop client loop");
             break;
         }
     }
@@ -54,9 +55,9 @@ int main(){
     isRun = true;
     std::thread th(RunClient);
     th.detach();
-    for(int i = 0; i < 10; i++){
-        std::cout << "start client " << i << std::endl;
-        int clientfd = emgr->connect_to("127.0.0.1", 8088);
+    for(int i = 0; i < 100; i++){
+        spdlog::info("start client {}", i);
+        emgr->connect_to("127.0.0.1", 8088);
         // std::thread clientth(sendMsg, clientfd);
         // clientth.detach();
     }
