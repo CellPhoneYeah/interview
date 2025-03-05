@@ -23,6 +23,7 @@ public:
     void do_send(epoll_event &ev, EpollEventContext *ctx);
     void close_fd(int fd);
     bool sendMsg(int fd, const char* msg, int size);
+    static int livingCount();
 private:
     static std::unordered_map<int, EpollEventContext*> contexts;
     int init();

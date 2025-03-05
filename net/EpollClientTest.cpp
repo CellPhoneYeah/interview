@@ -8,14 +8,29 @@
 #include <atomic>
 #include "slog.h"
 #include <signal.h>
+#include <arpa/inet.h>
 
 std::atomic<bool> isRun = false;
 EpollManager *emgr = new EpollManager();
 
 void sendMsg(int clientfd){
-    sleep(10);
-    int i = 0;
-    std::ostringstream oss;
+    // int i = 0;
+    // std::ostringstream oss;
+    std::string msg = "test msg " + clientfd;
+        int loop = 10;
+        while(1){
+            if(loop < 0){
+                break;
+            }
+            loop--;
+            int sent = send(clientfd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
+            if(sent < 0){
+                SPDLOG_WARN("err stop client {}", clientfd);
+                break;
+            }
+            SPDLOG_INFO("sended msg {}", clientfd);
+            sleep(5);
+        }
     if(clientfd > 20){
         // SPDLOG_INFO(" close {}", clientfd);
         // emgr->close_fd(clientfd);

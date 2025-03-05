@@ -2,6 +2,7 @@
 #include <string>
 #include <iostream>
 #include "EpollManager.h"
+#include "slog.h"
 
 EventContext::EventContext(int fd){
     ownfd = fd;
@@ -23,7 +24,9 @@ void EventContext::clearSendQ()
 
 void EventContext::readBytes(int byte_len)
 {
-    std::cout << std::string(readBuffer.data()) << std::endl;
+    // std::cout << std::string(readBuffer.data()) << std::endl;
+    SPDLOG_INFO("recv msg from {}", ownfd);
+    living();
     readBuffer.erase(readBuffer.begin(), readBuffer.begin() + offsetPos);
     offsetPos = 0;
 }

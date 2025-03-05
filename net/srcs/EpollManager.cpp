@@ -59,6 +59,7 @@ EpollManager::~EpollManager()
             delete(pCtx);
         }
         SPDLOG_INFO("del context {}", cur_fd);
+        sys_close_fd(cur_fd);
         it = contexts.find(cur_fd);
         if(it != contexts.end()){
             it = contexts.erase(it);
@@ -93,6 +94,19 @@ int EpollManager::sys_new_fd()
     return fd;
 }
 
+int EpollManager::livingCount()
+{
+    auto it = contexts.begin();
+    int count = 0;
+    while(it != contexts.end()){
+        if(!it->second->isDead()){
+            count ++;
+        }
+        it++;
+    }
+    return count;
+}
+
 int EpollManager::start_listen(std::string ip_str, int port)
 {
     struct sockaddr_in addr;
@@ -102,12 +116,17 @@ int EpollManager::start_listen(std::string ip_str, int port)
     
     addr.sin_port = htons(port);
     int listenfd = sys_new_fd();
+    int opt;
+    if(setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0){
+        SPDLOG_INFO("sock set reuse failed {} !", strerror(errno));
+        return -6;
+    }
     if(listenfd < 0){
         SPDLOG_INFO("sock create failed", errno);
         return -1;
     }
     if(bind(listenfd, (sockaddr*)&addr, len) < 0){
-        SPDLOG_INFO("sock bind failed:", errno);
+        SPDLOG_INFO("sock bind failed:{}", errno);
         return -2;
     }
 
@@ -127,6 +146,7 @@ int EpollManager::start_listen(std::string ip_str, int port)
     this->addContext(newCtx);
     ev.events = EPOLLIN | EPOLLET;
     ev.data.ptr = newCtx;
+    newCtx->set_noblocking(listenfd);
     if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listenfd, &ev) < 0){
         delContext(listenfd);
         SPDLOG_INFO("stop listen fd");
@@ -188,9 +208,9 @@ int EpollManager::loop()
         time_t current_time = std::time(nullptr);
         if(std::difftime(current_time, last_tick) > 5){
             last_tick = current_time;
-            SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{} new:{} close:{}", contexts.size(), listening_num, connected_num, connecting_num, new_sock_num, close_sock_num);
+            SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{} living:{}", contexts.size(), listening_num, connected_num, connecting_num, livingCount());
         }
-        int eventn = epoll_wait(epoll_fd, event_list, MAX_EPOLL_EVENT_NUM, 1); // 立刻返回结果，不阻塞
+        int eventn = epoll_wait(epoll_fd, event_list, MAX_EPOLL_EVENT_NUM, 100); // 立刻返回结果，不阻塞
         if(eventn < 0){
             if(errno == EINTR){
                 // 信号中断
@@ -208,7 +228,7 @@ int EpollManager::loop()
         // SPDLOG_INFO(" get epoll event {}", eventn);
         for (int i = 0; i < eventn; i++)
         {
-            SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{}", contexts.size(), listening_num, connected_num, connecting_num);
+            // SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{}", contexts.size(), listening_num, connected_num, connecting_num);
             struct epoll_event ev = event_list[i];
             EpollEventContext* ctx = (EpollEventContext*)ev.data.ptr;
             if(ev.events & EPOLLIN){

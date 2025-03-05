@@ -22,6 +22,7 @@ protected:
     int socket_type = 0;
     bool listening = false;
     bool connecting = false;
+    bool isLiving = false;
     public:
     std::queue<std::vector<char> > sendQ;
     void readBytes(int byte_len);
@@ -37,5 +38,8 @@ protected:
     void clearSendQ();
     void connectFinish(){connecting = false;}
     void connectStart(){connecting = true;}
+    void dead(){isLiving = false;}
+    void living(){isLiving = true;}
+    bool isDead(){return !isLiving;}
 };
 #endif
