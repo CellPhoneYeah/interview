@@ -6,27 +6,38 @@
 #include "EpollEventContext.h"
 #include <unistd.h>
 #include <ctime>
-#include <spdlog/spdlog.h>
+#include "slog.h"
 
 std::unordered_map<int, EpollEventContext*> EpollManager::contexts;
 
 void EpollManager::addContext(EpollEventContext * eec)
 {
-    contexts[eec->getFd()] = eec;
+    int fd = eec->getFd();
+    EpollEventContext* pCtx = contexts[fd];
+    if(pCtx != nullptr){
+        SPDLOG_WARN("repeat insert contex {} !!!", fd);
+    }
+    contexts[fd] = eec;
+    SPDLOG_INFO("add fd {} left ctx {}", fd, contexts.size());
 }
 
 void EpollManager::delContext(int fd)
 {
-    EpollEventContext* pCtx = contexts[fd];
-    if(pCtx != nullptr){
-        delete(pCtx);
+    auto it = contexts.find(fd);
+    if(it != contexts.end()){
+        delete(it->second);
     }
-    spdlog::info("del context {}", fd);
     contexts.erase(fd);
+    SPDLOG_INFO("del fd {} left ctx {}", fd, contexts.size());
 }
 EpollEventContext* EpollManager::getContext(int fd)
 {
-    return contexts[fd];
+    auto it = contexts.find(fd);
+    if(it == contexts.end()){
+        return nullptr;
+    }else{
+        return it->second;
+    }
 }
 
 EpollManager::EpollManager()
@@ -47,7 +58,7 @@ EpollManager::~EpollManager()
         if(pCtx != nullptr){
             delete(pCtx);
         }
-        spdlog::info("del context {}", cur_fd);
+        SPDLOG_INFO("del context {}", cur_fd);
         it = contexts.find(cur_fd);
         if(it != contexts.end()){
             it = contexts.erase(it);
@@ -58,7 +69,28 @@ EpollManager::~EpollManager()
 int EpollManager::init()
 {
     epoll_fd = epoll_create1(0);
+    total_accept_num = 0;
+    total_accept_failed_num = 0;
+    connected_num = 0;
+    connecting_num = 0;
+    listening_num = 0;
+
+    new_sock_num = 0;
+    close_sock_num = 0;
     return epoll_fd;
+}
+
+void EpollManager::sys_close_fd(int fd)
+{
+    ::close(fd);
+    close_sock_num++;
+}
+
+int EpollManager::sys_new_fd()
+{
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    new_sock_num++;
+    return fd;
 }
 
 int EpollManager::start_listen(std::string ip_str, int port)
@@ -69,24 +101,24 @@ int EpollManager::start_listen(std::string ip_str, int port)
     addr.sin_addr.s_addr = inet_addr(ip_str.c_str());
     
     addr.sin_port = htons(port);
-    int listenfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    int listenfd = sys_new_fd();
     if(listenfd < 0){
-        spdlog::info("sock create failed", errno);
+        SPDLOG_INFO("sock create failed", errno);
         return -1;
     }
     if(bind(listenfd, (sockaddr*)&addr, len) < 0){
-        spdlog::info("sock bind failed:", errno);
+        SPDLOG_INFO("sock bind failed:", errno);
         return -2;
     }
 
     if(addr.sin_addr.s_addr == INADDR_NONE){
-        spdlog::info("invalid ip addr ", ip_str);
-        close(listenfd);
+        SPDLOG_INFO("invalid ip addr ", ip_str);
+        sys_close_fd(listenfd);
         return -4;
     }
 
     if(listen(listenfd, 0) < 0){
-        spdlog::info("listen failed ", strerror(errno));
+        SPDLOG_INFO("listen failed ", strerror(errno));
         return -5;
     }
 
@@ -97,10 +129,11 @@ int EpollManager::start_listen(std::string ip_str, int port)
     ev.data.ptr = newCtx;
     if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listenfd, &ev) < 0){
         delContext(listenfd);
-        spdlog::info("stop listen fd");
+        SPDLOG_INFO("stop listen fd");
         return -3;
     }
-    spdlog::info("{} listen to fd ", listenfd);
+    SPDLOG_INFO("{} listen to fd ", listenfd);
+    listening_num++;
     last_tick = std::time(nullptr);
     return 0;
 }
@@ -111,15 +144,15 @@ int EpollManager::connect_to(std::string ip_str, int port)
     addr.sin_family = AF_INET;
     inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr);
     addr.sin_port = htons(port);
-    int client_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    int client_fd = sys_new_fd();
     socklen_t addrlen = sizeof(addr);
     int ret = connect(client_fd, (const sockaddr*)&addr, addrlen);
     if(ret == -1 && errno != EINPROGRESS){
-        spdlog::info("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ip_str, port, ret, errno);
+        SPDLOG_INFO("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ip_str, port, ret, errno);
         return -1;
     }
     if(ret == 0){
-        spdlog::info("connect finish ", client_fd);
+        SPDLOG_INFO("connect finish ", client_fd);
         struct epoll_event ev;
         ev.events = EPOLLIN | EPOLLET; // 已经完成连接，直接开始接收数据
         EpollEventContext * ctx = new EpollEventContext(client_fd, false);
@@ -128,6 +161,7 @@ int EpollManager::connect_to(std::string ip_str, int port)
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) < 0){
             epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
         }
+        connected_num++;
         addContext(ctx);
     }else{
         struct epoll_event ev;
@@ -139,7 +173,8 @@ int EpollManager::connect_to(std::string ip_str, int port)
             epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
         }
         addContext(ctx);
-        spdlog::info("waiting connect ", client_fd);
+        connecting_num++;
+        SPDLOG_INFO("waiting connect ", client_fd);
     }
     
     return client_fd;
@@ -151,26 +186,29 @@ int EpollManager::loop()
     while(1){
         loopcount ++;
         time_t current_time = std::time(nullptr);
-        if(std::difftime(current_time, last_tick) > 10){
+        if(std::difftime(current_time, last_tick) > 5){
             last_tick = current_time;
-            spdlog::info(" connection nums :{} loopcount:{}", contexts.size(), loopcount);
+            SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{} new:{} close:{}", contexts.size(), listening_num, connected_num, connecting_num, new_sock_num, close_sock_num);
         }
-        int eventn = epoll_wait(epoll_fd, event_list, MAX_EPOLL_EVENT_NUM, 0); // 立刻返回结果，不阻塞
+        int eventn = epoll_wait(epoll_fd, event_list, MAX_EPOLL_EVENT_NUM, 1); // 立刻返回结果，不阻塞
         if(eventn < 0){
             if(errno == EINTR){
                 // 信号中断
-                spdlog::info("epoll break by signal ");
+                SPDLOG_INFO("epoll break by signal ");
                 continue;
             }
-            spdlog::info("epoll wait err:{}", errno);
+            SPDLOG_INFO("epoll wait err:{}", errno);
             break;
         }
         if(eventn == 0){
-            // sleep(1);
+            // SPDLOG_INFO("epoll nothing {} total_accept {} failed {}", contexts.size(), total_accept_num, total_accept_failed_num);
+            // usleep(1000);
             return 0;
         }
+        // SPDLOG_INFO(" get epoll event {}", eventn);
         for (int i = 0; i < eventn; i++)
         {
+            SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{}", contexts.size(), listening_num, connected_num, connecting_num);
             struct epoll_event ev = event_list[i];
             EpollEventContext* ctx = (EpollEventContext*)ev.data.ptr;
             if(ev.events & EPOLLIN){
@@ -188,13 +226,13 @@ int EpollManager::loop()
                     do_send(ev, ctx);
                 }
             }else if(ev.events & EPOLLERR){
-                spdlog::warn("epoll err {}", ctx->getFd());
+                SPDLOG_WARN("epoll err {}", ctx->getFd());
                 close_fd(ctx->getFd());
             }else if(ev.events & EPOLLHUP){
-                spdlog::warn("{} epoll wait found remote closed sock {}", i, ctx->getFd());
+                SPDLOG_WARN("{} epoll wait found remote closed sock {}", i, ctx->getFd());
                 close_fd(ctx->getFd());
             }else{
-                spdlog::warn("other event ");
+                SPDLOG_WARN("other event ");
                 close_fd(ctx->getFd());
             }
         }
@@ -204,8 +242,6 @@ int EpollManager::loop()
 
 void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
 {
-    int accept_num = 0;
-    int failed_accept_num = 0;
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     int flag = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLERR;
@@ -215,35 +251,35 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
         int newFd = accept(currentFd, (sockaddr*)&addr, &len);
         if(newFd < 0){
             if(errno == EAGAIN || errno == EWOULDBLOCK){
-                spdlog::info("done all accept success {} failed {}", accept_num, failed_accept_num);
+                SPDLOG_INFO("done all accept connected_num {} ", connected_num);
                 // 所有连接处理完
                 return;
             }
             if(errno == ECONNABORTED){
                 // 事件处理前，对方断开
-                failed_accept_num++;
-                spdlog::info("remote disconnected");
+                total_accept_failed_num++;
+                SPDLOG_INFO("remote disconnected");
                 continue;;
             }
             if(errno == EMFILE){
-                failed_accept_num++;
-                spdlog::info("file fd limit success {} failed {}", accept_num, failed_accept_num);
+                total_accept_failed_num++;
+                SPDLOG_INFO("file fd limit success {} failed {}", total_accept_num, total_accept_failed_num);
                 close_fd(currentFd);
                 return;
             } 
             if(errno == ENFILE){
-                failed_accept_num++;
-                spdlog::info("out of fd success {} failed {}", accept_num, failed_accept_num);
+                total_accept_failed_num++;
+                SPDLOG_INFO("out of fd success {} failed {}", total_accept_num, total_accept_failed_num);
                 close_fd(currentFd);
                 return;
             }
             if(errno == EINTR){
-                failed_accept_num++;
-                spdlog::info("signal break ");
+                total_accept_failed_num++;
+                SPDLOG_INFO("signal break ");
                 continue;
             }
-            failed_accept_num++;
-            spdlog::info("unexpect err:{} success {} failed {}", errno, accept_num, failed_accept_num);
+            total_accept_failed_num++;
+            SPDLOG_INFO("unexpect err:{} success {} failed {}", errno, total_accept_num, total_accept_failed_num);
             close_fd(currentFd);
             return;
         }else{
@@ -252,15 +288,16 @@ void EpollManager::do_accept(epoll_event &ev, EpollEventContext *ctx)
             ev.data.ptr = newCtx;
             ev.events = flag;
             if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, newFd, &ev) != 0){
-                spdlog::info("accept modify new fd ");
+                SPDLOG_INFO("accept modify new fd ");
                 epoll_ctl(epoll_fd, EPOLL_CTL_MOD, newFd, &ev);
             }
             newCtx->set_noblocking(newFd);
             addContext(newCtx);
             char newIP[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &addr.sin_addr, newIP, 10);
-            accept_num++;
-            // spdlog::info("accept new fd {} from ip {}:{} ", newFd, std::string(newIP), ntohs(addr.sin_port));
+            total_accept_num++;
+            connected_num++;
+            SPDLOG_INFO("accept new fd {} from ip {}:{} ", newFd, std::string(newIP), ntohs(addr.sin_port));
         }
     }
 }
@@ -274,7 +311,8 @@ void EpollManager::do_read(EpollEventContext *ctx)
             // 断开连接
             epoll_ctl(epoll_fd, EPOLL_CTL_DEL, current_fd, nullptr);
             EpollManager::delContext(current_fd);
-            spdlog::info(" close fd {}", current_fd);
+            connected_num--;
+            SPDLOG_INFO(" close fd {}", current_fd);
             return;
         }
         if(read_bytes < 0){
@@ -284,27 +322,27 @@ void EpollManager::do_read(EpollEventContext *ctx)
             }
             if(errno == ECONNRESET){
                 //对端关闭连接
-                spdlog::info("remote close connect when recving {}", current_fd);
+                SPDLOG_INFO("remote close connect when recving {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
             if(errno == EINTR){
                 // 信号中断
-                spdlog::warn("signal break when recving {}", current_fd);
+                SPDLOG_WARN("signal break when recving {}", current_fd);
                 continue;;
             }
             if(errno == EBADF){
-                spdlog::warn("bad fd {}", current_fd);
+                SPDLOG_WARN("bad fd {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
             if(errno == ENOTCONN){
                 // 已经关闭的连接未从epoll移除可能出现
-                spdlog::warn("old closed epoll fd not del {}", current_fd);
+                SPDLOG_WARN("old closed epoll fd not del {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
-            spdlog::warn("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, errno, ctx->readBuffer.data(), ctx->offsetPos);
+            SPDLOG_WARN("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, errno, ctx->readBuffer.data(), ctx->offsetPos);
             close_fd(current_fd);
             return;
         }
@@ -317,24 +355,26 @@ void EpollManager::do_conn(epoll_event &ev, EpollEventContext *ctx)
     int currentFd = ctx->getFd();
     int error;
     socklen_t len = sizeof(error);
-    spdlog::info("do connect {}", currentFd);
+    // SPDLOG_INFO("do connect {}", currentFd);
     if(getsockopt(currentFd, SOL_SOCKET, SO_ERROR, &error, &len) == -1){
-        spdlog::info("connect failed {} err {}", currentFd, strerror(errno));
+        SPDLOG_INFO("connect failed {} err {}", currentFd, strerror(errno));
         close_fd(currentFd);
         return;
     }
     if(error != 0){
-        spdlog::error("connecting failed {} {}", currentFd, strerror(error));
+        SPDLOG_ERROR("connecting failed {} {}", currentFd, strerror(error));
         close_fd(currentFd);
         return;
     }
     ev.events = EPOLLIN | EPOLLET;
     if(epoll_ctl(epoll_fd, EPOLL_CTL_MOD, currentFd, &ev) == -1){
-        spdlog::error("epoll mod connect fd failed ");
+        SPDLOG_ERROR("epoll mod connect fd failed ");
         return;
     }
-    spdlog::info("epoll connect finished fd {}", currentFd);
+    // SPDLOG_INFO("epoll connect finished fd {}", currentFd);
     ctx->connectFinish();
+    connecting_num--;
+    connected_num++;
 }
 
 void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
@@ -346,7 +386,7 @@ void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
         if(ctx->sendQ.size() == 0){
             ev.events &= ~EPOLLOUT;
             if(epoll_ctl(epoll_fd, EPOLL_CTL_MOD, current_fd, &ev) < 0){
-                spdlog::info(" modify fd failed {}", errno);
+                SPDLOG_INFO(" modify fd failed {}", errno);
                 close_fd(epoll_fd);
                 return;
             }
@@ -360,31 +400,31 @@ void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
                 // 发送缓冲满了, 再次注册等待下次发送
                 ev.events &= EPOLLOUT | EPOLLET;
                 epoll_ctl(epoll_fd, EPOLL_CTL_MOD, current_fd, &ev);
-                spdlog::info("send buffer full !");
+                SPDLOG_INFO("send buffer full !");
                 return;
             }
             if(errno == EPIPE){
                 // 对方关闭连接
-                spdlog::info(" remote closed when send msg {}",current_fd);
+                SPDLOG_INFO(" remote closed when send msg {}",current_fd);
                 close_fd(current_fd);
                 return;
             }
             if(errno == ENOTSOCK){
-                spdlog::info(" send target not a fd {}", current_fd);
+                SPDLOG_INFO(" send target not a fd {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
             if(errno == EINVAL){
-                spdlog::info(" some args is wrong when send to fd {}", current_fd);
+                SPDLOG_INFO(" some args is wrong when send to fd {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
             if(errno == ECONNRESET){
-                spdlog::info(" remote reset when send to fd {}", current_fd);
+                SPDLOG_INFO(" remote reset when send to fd {}", current_fd);
                 close_fd(current_fd);
                 return;
             }
-            spdlog::info(" unexpected err when send to fd {} err {}", current_fd, errno);
+            SPDLOG_INFO(" unexpected err when send to fd {} err {}", current_fd, errno);
             return;
         }
         if(sent < msg.size()){
@@ -399,7 +439,17 @@ void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
 void EpollManager::close_fd(int fd)
 {
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
-    close(fd);
+    sys_close_fd(fd);
+    EpollEventContext* pCtx = getContext(fd);
+    if(pCtx != nullptr){
+        if(pCtx->isListening()){
+            listening_num --;
+        }
+        if(pCtx->isConnecting()){
+            connecting_num --;
+        }
+        connected_num --;
+    }
     delContext(fd);
 }
 

@@ -10,7 +10,8 @@
                 "${workspaceFolder}/3rd/**",
                 "/usr/include/**",
                 "${workspaceFolder}/3rd/spdlog/include/**",
-                "${workspaceFolder}/3rd/spdlog/src/**"
+                "${workspaceFolder}/3rd/spdlog/src/**",
+                "${workspaceFolder}/3rd/spdlog/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-13",

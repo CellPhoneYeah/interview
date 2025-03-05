@@ -4,7 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include <atomic>
-#include <spdlog/spdlog.h>
+#include "slog.h"
 
 std::atomic<bool> running;
 EpollManager *emgr = new EpollManager();
@@ -12,11 +12,10 @@ EpollManager *emgr = new EpollManager();
 void startServer(){
     int listenRet = 0;
     if((listenRet = emgr->start_listen("127.0.0.1", 8088)) < 0){
-        std::cout << "listen failed " << listenRet << std::endl;
+        SPDLOG_INFO("listen failed {}", listenRet);
         return;
     }
     while(running){
-        // std::cout << "loop stop signal " << running;
         emgr->loop();
     }
     delete(emgr);
@@ -25,23 +24,23 @@ void startServer(){
 void sigintHandler(int sigint){
     if(sigint == SIGINT){
         running = false;
-        std::cout << "stop signal " << running;
+        SPDLOG_INFO("stop signal waiting for close...");
+        sleep(5);
         exit(0);
     }
 }
 
 int main(){
-    spdlog::info("test spdlog!!!");
     struct sigaction sa;
     sa.sa_handler = sigintHandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
 
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        std::cerr << "Failed to set signal handler: " << strerror(errno) << std::endl;
+        SPDLOG_WARN("Failed to set signal handler: {}", strerror(errno));
         return -1;
     }
-    std::cout << "start epoll server" << std::endl;
+    SPDLOG_INFO("start epoll server");
     running = true;
     std::thread th(startServer);
     th.detach();

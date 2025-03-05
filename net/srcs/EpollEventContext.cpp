@@ -35,7 +35,7 @@ int EpollEventContext::handle_read_event(epoll_event *event)
             }
             set_noblocking(newFd);
             EpollEventContext* newContext = new EpollEventContext(newFd);
-            EpollContextManager::addContext(newContext);
+            // EpollContextManager::addContext(newContext);
             int flag = EPOLLOUT | EPOLLET; // 边缘触发
             event->events = flag;
             event->data.ptr = newContext;

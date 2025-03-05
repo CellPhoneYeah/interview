@@ -41,7 +41,7 @@ TARGET = ./spdlog/build/libspdlog.a
 BUILD_PATH = ./spdlog/build
 $(TARGET): $(BUILD_PATH)
 	cd $(BUILD_PATH) && cmake .. && cmake --build .
-	cp $(BUILD_PATH)/libspdlog.a
+	cp $(BUILD_PATH)/libspdlog.a ../libs
 
 $(BUILD_PATH):
 	mkdir -p $(BUILD_PATH)

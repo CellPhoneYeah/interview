@@ -26,7 +26,17 @@ public:
 private:
     static std::unordered_map<int, EpollEventContext*> contexts;
     int init();
+    void sys_close_fd(int fd);
+    int sys_new_fd();
     int epoll_fd;
+    int total_accept_num;
+    int total_accept_failed_num;
+    int connected_num;
+    int connecting_num;
+    int listening_num;
+
+    int new_sock_num;
+    int close_sock_num;
     struct epoll_event event_list[MAX_EPOLL_EVENT_NUM];
     std::unordered_set<int> listening_fds;
     time_t last_tick;

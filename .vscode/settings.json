@@ -63,6 +63,13 @@
         "format": "cpp",
         "condition_variable": "cpp",
         "unordered_set": "cpp",
-        "mutex": "cpp"
+        "mutex": "cpp",
+        "bitset": "cpp",
+        "codecvt": "cpp",
+        "complex": "cpp",
+        "regex": "cpp",
+        "source_location": "cpp",
+        "expected": "cpp",
+        "cerrno": "cpp"
     }
 }
