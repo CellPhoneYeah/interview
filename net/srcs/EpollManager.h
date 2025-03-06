@@ -21,9 +21,11 @@ public:
     void do_read(EpollEventContext *ctx);
     void do_conn(epoll_event &ev, EpollEventContext *ctx);
     void do_send(epoll_event &ev, EpollEventContext *ctx);
+    void do_read_pipe(EpollEventContext *ctx);
     void close_fd(int fd);
     bool sendMsg(int fd, const char* msg, int size);
     static int livingCount();
+    bool newPipe(int pipe_fd_out);
 private:
     static std::unordered_map<int, EpollEventContext*> contexts;
     int init();

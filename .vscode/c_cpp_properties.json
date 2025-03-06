@@ -11,7 +11,8 @@
                 "/usr/include/**",
                 "${workspaceFolder}/3rd/spdlog/include/**",
                 "${workspaceFolder}/3rd/spdlog/src/**",
-                "${workspaceFolder}/3rd/spdlog/include"
+                "${workspaceFolder}/3rd/spdlog/include",
+                "${workspaceFolder}/include/spdlog"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-13",

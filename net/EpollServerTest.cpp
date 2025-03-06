@@ -7,9 +7,10 @@
 #include "slog.h"
 
 std::atomic<bool> running;
-EpollManager *emgr = new EpollManager();
+EpollManager *emgr;
 
 void startServer(){
+    emgr = new EpollManager();
     int listenRet = 0;
     if((listenRet = emgr->start_listen("127.0.0.1", 8088)) < 0){
         SPDLOG_INFO("listen failed {}", listenRet);

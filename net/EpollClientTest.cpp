@@ -9,32 +9,24 @@
 #include "slog.h"
 #include <signal.h>
 #include <arpa/inet.h>
+#include <sstream>
 
 std::atomic<bool> isRun = false;
-EpollManager *emgr = new EpollManager();
+EpollManager *emgr;
 
-void sendMsg(int clientfd){
+void sendMsg(int pipe_fd_in){
+    char buff[64] = "conn";
+    write(pipe_fd_in, buff, 64);
+    SPDLOG_INFO("sendMsg:{}", buff);
+    while(1){
+        if(isRun){
+            sleep(5);
+        }else{
+            break;
+        }
+    }
     // int i = 0;
     // std::ostringstream oss;
-    std::string msg = "test msg " + clientfd;
-        int loop = 10;
-        while(1){
-            if(loop < 0){
-                break;
-            }
-            loop--;
-            int sent = send(clientfd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
-            if(sent < 0){
-                SPDLOG_WARN("err stop client {}", clientfd);
-                break;
-            }
-            SPDLOG_INFO("sended msg {}", clientfd);
-            sleep(5);
-        }
-    if(clientfd > 20){
-        // SPDLOG_INFO(" close {}", clientfd);
-        // emgr->close_fd(clientfd);
-    }
     // while(1){
     //     if(isRun){
     //         oss.str("");
@@ -56,7 +48,10 @@ void sendMsg(int clientfd){
     // }
 }
 
-void RunClient(){
+void RunClient(int pipe_fd_out){
+    if(!emgr->newPipe(pipe_fd_out)){
+        return;
+    }
     while(1){
         if(isRun){
             emgr->loop();
@@ -80,6 +75,7 @@ void sigintHandler(int sigint){
 }
 
 int main(){
+    emgr = new EpollManager();
     struct sigaction sa;
     sa.sa_handler = sigintHandler;
     sigemptyset(&sa.sa_mask);
@@ -90,23 +86,28 @@ int main(){
         return -1;
     }
 
+    int pipe_fd[2];
+    pipe(pipe_fd);
     isRun = true;
-    std::thread th(RunClient);
-    th.detach();
-    for(int i = 0; i < 10; i++){
-        SPDLOG_INFO("start client {}", i);
-        int clientfd = emgr->connect_to("127.0.0.1", 8088);
-        std::thread clientth(sendMsg, clientfd);
-        clientth.detach();
+    
+    for(int i = 0; i < 300; i++){
+        std::ostringstream oss;
+        oss << std::this_thread::get_id();
+        SPDLOG_INFO("start client {} {}", i, oss.str());
+        emgr->connect_to("127.0.0.1", 8088);
+        // std::thread clientth(sendMsg, pipe_fd[1]);
+        // clientth.detach();
     }
-    while(1){
-        char str[1024];
-        char* ret = fgets(str, 1024, stdin);
-        if(ret != nullptr && strcmp(str, "stop") == 0){
-            isRun = false;
-            break;
-        }
-        isRun = true;
-    }
+    sleep(1);
+    RunClient(pipe_fd[0]);
+    // while(1){
+    //     char str[1024];
+    //     char* ret = fgets(str, 1024, stdin);
+    //     if(ret != nullptr && strcmp(str, "stop") == 0){
+    //         isRun = false;
+    //         break;
+    //     }
+    //     isRun = true;
+    // }
     return 0;
 }
