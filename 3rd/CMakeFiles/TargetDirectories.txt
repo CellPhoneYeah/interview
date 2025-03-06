@@ -1,5 +1,0 @@
-/home/ubuntu/workspace/interview/3rd/CMakeFiles/proto_test.dir
-/home/ubuntu/workspace/interview/3rd/CMakeFiles/server.dir
-/home/ubuntu/workspace/interview/3rd/CMakeFiles/client.dir
-/home/ubuntu/workspace/interview/3rd/CMakeFiles/edit_cache.dir
-/home/ubuntu/workspace/interview/3rd/CMakeFiles/rebuild_cache.dir

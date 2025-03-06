@@ -9,3 +9,4 @@ build
 */bin/
 testlib/svr
 testlib/cle
+**/CMakeFiles

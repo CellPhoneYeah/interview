@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/proto_test.dir/proto_test.cpp.o CMakeFiles/proto_test.dir/proto/generated/proto/chat.pb.cc.o CMakeFiles/proto_test.dir/proto/generated/proto/common.pb.cc.o CMakeFiles/proto_test.dir/proto/generated/proto/login.pb.cc.o -o proto_test  /usr/lib/x86_64-linux-gnu/libprotobuf.so 
