@@ -1,8 +1,12 @@
+#ifndef EPOLL_MANAGER_H
+#define EPOLL_MANAGER_H
 #include <unordered_map>
 #include <unordered_set>
 #include "EpollEventContext.h"
 #include <string.h>
 #include <string>
+#include <atomic>
+#include "EpollNet.h"
 
 class EpollManager{
 public:
@@ -11,10 +15,9 @@ public:
     static void addContext(EpollEventContext*);
     static void delContext(int fd);
     static EpollEventContext* getContext(int fd);
-
-    EpollManager();
-    ~EpollManager();
+    
     int start_listen(std::string addr, int port);
+    int stop_listen(std::string addr, int port);
     int connect_to(std::string addr, int port);
     int loop();
     void do_accept(struct epoll_event &ev, EpollEventContext* ctx);
@@ -26,9 +29,20 @@ public:
     bool sendMsg(int fd, const char* msg, int size);
     static int livingCount();
     bool newPipe(int pipe_fd_out);
+    void run();
+    bool isRunning(){return running;}
+    void stop(){running = false;}
+    static void startManager(int pipe_fd);
+    static int listeningFd(std::string &addr, int port);
+    EpollManager(int pipe_in_fd = -1);
+    ~EpollManager();
 private:
     static std::unordered_map<int, EpollEventContext*> contexts;
-    int init();
+
+    // EpollManager(const EpollManager&) = delete;
+    // EpollManager& operator=(const EpollManager&) = delete;
+    
+    int init(int pipe_in_fd);
     void sys_close_fd(int fd);
     int sys_new_fd();
     int epoll_fd;
@@ -43,4 +57,7 @@ private:
     struct epoll_event event_list[MAX_EPOLL_EVENT_NUM];
     std::unordered_set<int> listening_fds;
     time_t last_tick;
+    int pipe_fd;
+    std::atomic<bool> running;
 };
+#endif

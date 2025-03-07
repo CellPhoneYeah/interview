@@ -2,6 +2,8 @@
 #define EVENT_CONTEXT_H
 #include <queue>
 #include <vector>
+#include <string.h>
+#include <string>
 #define MAX_READ_BUFFER_SIZE 1024
 
 enum HANDLE_EVENT_CODE{
@@ -18,18 +20,21 @@ enum HANDLE_EVENT_CODE{
 
 class EventContext{
 protected:
+    int session_id = 0;
     int ownfd = 0;
     int socket_type = 0;
     bool listening = false;
     bool connecting = false;
     bool isLiving = false;
+    char ipaddr[46];
+    int port;
     public:
     std::queue<std::vector<char> > sendQ;
     void readBytes(int byte_len);
     std::vector<char> readBuffer;
     int offsetPos = 0;
-    EventContext(int fd);
-    EventContext(int fd, bool isListen);
+    EventContext(int session_id, int fd);
+    EventContext(int session_id, int fd, bool isListen);
     virtual ~EventContext() = 0;
     virtual int handle_event(void* event) = 0;
     int getFd(){return ownfd;}
@@ -41,5 +46,7 @@ protected:
     void dead(){isLiving = false;}
     void living(){isLiving = true;}
     bool isDead(){return !isLiving;}
+    void setListening(std::string &ipaddr, int port);
+    bool isListening(std::string &ipaddr, int port);
 };
 #endif

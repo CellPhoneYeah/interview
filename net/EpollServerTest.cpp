@@ -1,26 +1,26 @@
-#include "EpollManager.h"
 #include <iostream>
 #include <thread>
 #include <string.h>
 #include <signal.h>
 #include <atomic>
 #include "slog.h"
+#include "EpollNet.h"
 
 std::atomic<bool> running;
 EpollManager *emgr;
 
-void startServer(){
-    emgr = new EpollManager();
-    int listenRet = 0;
-    if((listenRet = emgr->start_listen("127.0.0.1", 8088)) < 0){
-        SPDLOG_INFO("listen failed {}", listenRet);
-        return;
-    }
-    while(running){
-        emgr->loop();
-    }
-    delete(emgr);
-}
+// void startServer(){
+//     emgr = new EpollManager();
+//     int listenRet = 0;
+//     if((listenRet = emgr->start_listen("127.0.0.1", 8088)) < 0){
+//         SPDLOG_INFO("listen failed {}", listenRet);
+//         return;
+//     }
+//     while(running){
+//         emgr->loop();
+//     }
+//     delete(emgr);
+// }
 
 void sigintHandler(int sigint){
     if(sigint == SIGINT){
@@ -43,8 +43,16 @@ int main(){
     }
     SPDLOG_INFO("start epoll server");
     running = true;
-    std::thread th(startServer);
-    th.detach();
+    // std::thread th(startServer);
+    // th.detach();
+
+    EpollNet::getInstance();
+    sleep(5);
+    EpollNet::getInstance()->listenOn("127.0.0.1", 8088);
+
+    sleep(30);
+    EpollNet::getInstance()->stopListen("127.0.0.1", 8088);
+    
     char str[1024];
     while(1){
         char* ret = fgets(str, 1024, stdin);

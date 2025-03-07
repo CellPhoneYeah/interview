@@ -10,3 +10,4 @@ build
 testlib/svr
 testlib/cle
 **/CMakeFiles
+**/build

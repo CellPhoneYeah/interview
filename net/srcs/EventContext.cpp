@@ -1,5 +1,5 @@
 #include "EventContext.h"
-#include <string>
+#include <string.h>
 #include <iostream>
 #include "EpollManager.h"
 #include "slog.h"
@@ -20,6 +20,21 @@ void EventContext::clearSendQ()
 {
     std::queue<std::vector<char>>().swap(sendQ);
     offsetPos = 0;
+}
+
+void EventContext::setListening(std::string &ipaddr, int port)
+{
+    listening = true;
+    strcpy(this->ipaddr, ipaddr.c_str());
+    this->port = port;
+}
+
+bool EventContext::isListening(std::string &ipaddr, int port)
+{
+    if(!listening){
+        return false;
+    }
+    return strcmp(this->ipaddr, ipaddr.c_str()) && this->port == port;
 }
 
 void EventContext::readBytes(int byte_len)

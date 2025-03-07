@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <iostream>
 #include <fcntl.h>
-#include "EpollContextManager.h"
 #include <string.h>
 #include "EpollEventContext.h"
 
@@ -35,7 +34,6 @@ int EpollEventContext::handle_read_event(epoll_event *event)
             }
             set_noblocking(newFd);
             EpollEventContext* newContext = new EpollEventContext(newFd);
-            // EpollContextManager::addContext(newContext);
             int flag = EPOLLOUT | EPOLLET; // 边缘触发
             event->events = flag;
             event->data.ptr = newContext;

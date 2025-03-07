@@ -13,7 +13,7 @@
 
 std::unordered_map<int, EpollEventContext*> EpollManager::contexts;
 
-void EpollManager::addContext(EpollEventContext * eec)
+void EpollManager::addContext(EpollEventContext *eec)
 {
     int fd = eec->getFd();
     EpollEventContext* pCtx = contexts[fd];
@@ -43,9 +43,9 @@ EpollEventContext* EpollManager::getContext(int fd)
     }
 }
 
-EpollManager::EpollManager()
+EpollManager::EpollManager(int pipe_in_fd)
 {
-    init();
+    init(pipe_in_fd);
 }
 
 EpollManager::~EpollManager()
@@ -70,8 +70,9 @@ EpollManager::~EpollManager()
     }
 }
 
-int EpollManager::init()
+int EpollManager::init(int pipe_in_fd)
 {
+    pipe_fd = pipe_in_fd;
     epoll_fd = epoll_create1(0);
     total_accept_num = 0;
     total_accept_failed_num = 0;
@@ -81,9 +82,9 @@ int EpollManager::init()
 
     new_sock_num = 0;
     close_sock_num = 0;
-    std::ostringstream oss;
-    oss << std::this_thread::get_id();
-    SPDLOG_INFO("epollmanager init {} {}", oss.str(), epoll_fd);
+
+    newPipe(pipe_in_fd);
+    SPDLOG_INFO("epollmanager init {} ", epoll_fd);
     return epoll_fd;
 }
 
@@ -113,23 +114,52 @@ int EpollManager::livingCount()
     return count;
 }
 
-bool EpollManager::newPipe(int pipe_fd_out)
+bool EpollManager::newPipe(int pipe_fd)
 {
     struct epoll_event ev;
-    EpollEventContext* newCtx = new EpollEventContext(pipe_fd_out);
+    EpollEventContext* newCtx = new EpollEventContext(pipe_fd);
     newCtx->setPipe();
     this->addContext(newCtx);
     ev.events = EPOLLIN | EPOLLET;
     ev.data.ptr = newCtx;
-    if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, pipe_fd_out, &ev) < 0){
-        SPDLOG_WARN("new pipe failed {}", strerror(errno));
+    newCtx->set_noblocking(pipe_fd);
+    if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, pipe_fd, &ev) < 0){
+        SPDLOG_WARN("new pipe failed {} {} {}", strerror(errno), epoll_fd, pipe_fd);
         return false;
     }
     return true;
 }
 
+void EpollManager::run(){
+    running = true;
+    EpollNet::setManagerState(1);
+    while(isRunning()){
+        loop();
+    }
+    EpollNet::setManagerState(0);
+}
+
+void EpollManager::startManager(int pipe_fd)
+{
+    EpollManager* emgr = new EpollManager(pipe_fd);
+    emgr->run();
+}
+
+int EpollManager::listeningFd(std::string &addr, int port)
+{
+    auto it = contexts.begin();
+    while(it != contexts.end()){
+        if(it->second->isListening(addr, port)){
+            return it->second->getFd();
+        }
+        it++;
+    }
+    return -1;
+}
+
 int EpollManager::start_listen(std::string ip_str, int port)
 {
+    SPDLOG_INFO("start_listen {}:{} ", ip_str, port);
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     addr.sin_family = AF_INET;
@@ -164,7 +194,8 @@ int EpollManager::start_listen(std::string ip_str, int port)
 
     struct epoll_event ev;
     EpollEventContext* newCtx = new EpollEventContext(listenfd, true);
-    this->addContext(newCtx);
+    newCtx->setListening(ip_str, port);
+    addContext(newCtx);
     ev.events = EPOLLIN | EPOLLET;
     ev.data.ptr = newCtx;
     newCtx->set_noblocking(listenfd);
@@ -177,6 +208,15 @@ int EpollManager::start_listen(std::string ip_str, int port)
     listening_num++;
     last_tick = std::time(nullptr);
     return 0;
+}
+
+int EpollManager::stop_listen(std::string addr, int port)
+{
+    int fd = listeningFd(addr, port);
+    if(fd < 0){
+        return 0;
+    }
+    close_fd(fd);
 }
 
 int EpollManager::connect_to(std::string ip_str, int port)
@@ -224,10 +264,12 @@ int EpollManager::connect_to(std::string ip_str, int port)
 int EpollManager::loop()
 {
     int loopcount = 0;
-    while(1){
-        loopcount ++;
+    while (1)
+    {
+        loopcount++;
         time_t current_time = std::time(nullptr);
-        if(std::difftime(current_time, last_tick) > 5){
+        if (std::difftime(current_time, last_tick) > 10)
+        {
             last_tick = current_time;
             std::ostringstream oss;
             oss << std::this_thread::get_id();
@@ -235,8 +277,10 @@ int EpollManager::loop()
         }
         struct epoll_event ev_list[MAX_EPOLL_EVENT_NUM];
         int eventn = epoll_wait(epoll_fd, ev_list, MAX_EPOLL_EVENT_NUM, 100); // 立刻返回结果，不阻塞
-        if(eventn < 0){
-            if(errno == EINTR){
+        if (eventn < 0)
+        {
+            if (errno == EINTR)
+            {
                 // 信号中断
                 SPDLOG_INFO("epoll break by signal ");
                 continue;
@@ -244,40 +288,52 @@ int EpollManager::loop()
             SPDLOG_INFO("epoll wait err:{}", errno);
             break;
         }
-        if(eventn == 0){
-            // SPDLOG_INFO("epoll nothing {} total_accept {} failed {}", contexts.size(), total_accept_num, total_accept_failed_num);
+        if (eventn == 0)
+        {
             return 0;
         }
-        // SPDLOG_INFO(" get epoll event {}", eventn);
         for (int i = 0; i < eventn; i++)
         {
-            // SPDLOG_INFO(" connection total :{} listening: {} connected:{} connecting:{}", contexts.size(), listening_num, connected_num, connecting_num);
             struct epoll_event ev = ev_list[i];
-            EpollEventContext* ctx = (EpollEventContext*)ev.data.ptr;
-            if(ev.events & EPOLLIN){
-                if(ctx->isListening()){
+            EpollEventContext *ctx = (EpollEventContext *)ev.data.ptr;
+            if (ev.events & EPOLLIN)
+            {
+                if (ctx->isListening())
+                {
                     do_accept(ev, ctx);
-                }else if(ctx->isPipe()){
+                }
+                else if (ctx->isPipe())
+                {
                     do_read_pipe(ctx);
                 }
-                else{
+                else
+                {
                     do_read(ctx);
                 }
-            }else if(ev.events & EPOLLOUT){
-                if(ctx->isConnecting()){
+            }
+            else if (ev.events & EPOLLOUT)
+            {
+                if (ctx->isConnecting())
+                {
                     do_conn(ev, ctx);
                 }
                 else
                 {
                     do_send(ev, ctx);
                 }
-            }else if(ev.events & EPOLLERR){
+            }
+            else if (ev.events & EPOLLERR)
+            {
                 SPDLOG_WARN("epoll err {}", ctx->getFd());
                 close_fd(ctx->getFd());
-            }else if(ev.events & EPOLLHUP){
+            }
+            else if (ev.events & EPOLLHUP)
+            {
                 SPDLOG_WARN("{} epoll wait found remote closed sock {}", i, ctx->getFd());
                 close_fd(ctx->getFd());
-            }else{
+            }
+            else
+            {
                 SPDLOG_WARN("other event ");
                 close_fd(ctx->getFd());
             }
@@ -487,31 +543,52 @@ void EpollManager::do_send(epoll_event &ev, EpollEventContext *ctx)
 
 void EpollManager::do_read_pipe(EpollEventContext *ctx)
 {
-    char buff[64];
+    ControlCommand cmd;
     int pipe_fd = ctx->getFd();
     while(1){
-        int n = read(pipe_fd, buff, 64);
+        int n = read(pipe_fd, &cmd, sizeof(ControlCommand));
         if(n == 0){
             SPDLOG_INFO("reader pipe closed {}", pipe_fd);
             close(pipe_fd);
             return;
         }
         if(n < 0){
-            if(errno == EAGAIN || errno == EWOULDBLOCK){
-            }else{
+            if(errno != EAGAIN && errno != EWOULDBLOCK){
                 SPDLOG_WARN("read pip err :{}", strerror(errno));
             }
             break;
         }
-        std::string str(buff);
-        SPDLOG_INFO("read from pipe {}", buff);
-        if(strcmp(str.c_str(), "conn") == 0){
-            connect_to("127.0.0.1", 8088);
-        }else{
-            SPDLOG_INFO("unknow pipe cmd: {}", str);
+        SPDLOG_INFO("read from pipe {}", (int)cmd.cmd);
+        switch (cmd.cmd)
+        {
+        case CMD_START_LISTEN:
+            SPDLOG_INFO("start listen");
+            start_listen(cmd.ipaddr, cmd.port);
+            break;
+
+        case CMD_STOP_LISTEN:
+            SPDLOG_INFO("stop listen");
+            stop_listen(cmd.ipaddr, cmd.port);
+            break;
+
+        case CMD_CONNECT_TO:
+            SPDLOG_INFO("connect");
+            connect_to(cmd.ipaddr, cmd.port);
+            break;
+
+        case CMD_DISCONNECT:
+            SPDLOG_INFO("disconnect");
+            break;
+
+        case CMD_EXIT:
+            SPDLOG_INFO("exit");
+            break;
+        
+        default:
+            SPDLOG_INFO("unknow cmd:{}", (int)cmd.cmd);
+            break;
         }
     }
-    
 }
 
 void EpollManager::close_fd(int fd)
