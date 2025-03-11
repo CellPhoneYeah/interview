@@ -2,6 +2,7 @@
 #define EPOLL_NET_H
 #include <string.h>
 #include <string>
+#include "EpollConnectHandler.h"
 #include <atomic>
 
 class EpollManager;
@@ -35,6 +36,7 @@ public:
     int stopListen(std::string ipaddr, int port);
     EpollManager* getManager(){return epollManager;}
     static void setManagerState(bool newState){EpollNet::managerState = newState;}
+    void setConnectHandler(EpollConnectHandler* handler){this->connhandler = handler;}
 private:
     static void startManager(int pipe_fd_out);
 
@@ -43,6 +45,7 @@ private:
     EpollNet(const EpollNet&) = delete;
     EpollNet& operator=(const EpollNet&) = delete;
     EpollManager* epollManager;
+    EpollConnectHandler* connhandler;
     int pipe_fd[2];
 
     void sendCmd(ControlCommand cmd);
