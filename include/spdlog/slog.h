@@ -1,5 +1,5 @@
 #ifndef SLOG_H
-#define SLG_H
+#define SLOG_H
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <memory>

@@ -70,6 +70,7 @@
         "regex": "cpp",
         "source_location": "cpp",
         "expected": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "shared_mutex": "cpp"
     }
 }

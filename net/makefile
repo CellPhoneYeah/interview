@@ -21,20 +21,25 @@ SERVERFILE = ./EpollServerTest.cpp
 CLIENTFILE = ./EpollClientTest.cpp
 SERVER = $(BINPATH)/server
 CLIENT = $(BINPATH)/client
+LIB = $(OBJSPATH)/libepollnet.a
 
 # 生成目标可执行文件的规则
-$(SERVER): $(OBJS) $(SERVERFILE) | $(BINPATH) $(CLIENT) 
+$(SERVER): $(OBJS) $(SERVERFILE) | $(BINPATH) $(CLIENT)  $(LIB)
 	$(CPP) $(CFLAGS) $(OBJS) $(SERVERFILE) -o $(SERVER)
 
 $(CLIENT): $(OBJS) $(CLIENTFILE)| $(BINPATH)
 	$(CPP) $(CFLAGS) $(OBJS) $(CLIENTFILE) -o $(CLIENT)
+
+$(LIB): $(OBJS) | $(OBJSPATH)
+	ar rcs $@ $(OBJS)
+	ranlib $@
 
 $(OBJSPATH) $(BINPATH):
 	$(MKDIR) $@
 
 # 生成 .o 文件的规则
 $(OBJSPATH)/%.o: $(CPPPATH)/%.cpp | $(OBJSPATH)
-	$(CPP) -c $(CFLAGS) $< -o $@
+	$(CPP) -c $(CFLAGS) -shared $< -o $@
 
 
 .PHONY : clean
@@ -42,3 +47,5 @@ clean:
 	-$(RM) $(SERVER)
 	-$(RM) $(CLIENT)
 	-$(RM) $(OBJSPATH)/*.o 
+	-$(RM) $(OBJSPATH)/*.so
+	-$(RM) $(OBJSPATH)/*.a

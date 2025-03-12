@@ -1,3 +1,5 @@
+#ifndef WATCH_DOG_H
+#define WATCH_DOG_H
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
@@ -29,3 +31,4 @@ public:
     std::unordered_set<int> getConnections() const{return this->connections;}
     friend std::ostream& operator<<(std::ostream&, const watchdog& wd);
 };
+#endif

@@ -33,8 +33,8 @@ protected:
     void readBytes(int byte_len);
     std::vector<char> readBuffer;
     int offsetPos = 0;
-    EventContext(int session_id, int fd);
-    EventContext(int session_id, int fd, bool isListen);
+    EventContext(int fd);
+    EventContext(int fd, bool isListen);
     virtual ~EventContext() = 0;
     virtual int handle_event(void* event) = 0;
     int getFd(){return ownfd;}
