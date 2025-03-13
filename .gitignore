@@ -11,3 +11,4 @@ testlib/svr
 testlib/cle
 **/CMakeFiles
 **/build
+perf.data

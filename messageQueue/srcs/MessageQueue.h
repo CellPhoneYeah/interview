@@ -25,23 +25,29 @@ public:
 size_t MessageQueue::MAX_MEESSAGE_QUEUE_SIZE = 1024;
 
 int MessageQueue::putM(const std::string &msg){
-    std::shared_lock lock(mu);
+    std::unique_lock<std::shared_mutex> lock(mu);
     if(messages.size() >= MAX_MEESSAGE_QUEUE_SIZE){
         return -1;
     }
-    messages.push_back(msg);
+    messages.push_back(std::move(msg));
     return 0;
 }
 
 std::string MessageQueue::popM(){
-    std::shared_lock lock(mu);
-    auto it = messages.front();
+    std::unique_lock<std::shared_mutex> lock(mu);
+    if(messages.empty()){
+        return "";
+    }
+    auto it = std::move(messages.front());
     messages.pop_front();
     return it;
 }
 
 std::string MessageQueue::getTopM(){
-    std::shared_lock lock(mu);
+    std::unique_lock<std::shared_mutex> lock(mu);
+    if(messages.empty()){
+        return "";
+    }
     auto it = messages.front();
     return it;
 }
