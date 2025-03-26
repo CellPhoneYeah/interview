@@ -12,3 +12,4 @@ testlib/cle
 **/CMakeFiles
 **/build
 perf.data
+./build

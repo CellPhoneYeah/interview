@@ -15,7 +15,8 @@
                 "${workspaceFolder}/include/spdlog",
                 "${workspaceFolder}/watchdog",
                 "${workspaceFolder}/net/srcs",
-                "${workspaceFolder}/messageQueue/srcs"
+                "${workspaceFolder}/messageQueue/srcs",
+                "${workspaceFolder}/watchdog/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-13",

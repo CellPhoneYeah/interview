@@ -1,0 +1,5 @@
+set(SPDLOG_BUILD_SHARED true)
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/libs)
+
+add_subdirectory(spdlog)
