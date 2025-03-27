@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package login;
+
+message Login {
+  string name = 1;
+  string password= 2;
+  int32 id = 3;
+}
+
+message LoginRet {
+    int32 code = 1;
+}
+
+message Logout {
+  string name = 1;
+  int32 id = 2;
+}
+
+message LogoutRet {
+    int32 code = 1;
+}
