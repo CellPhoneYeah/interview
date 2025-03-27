@@ -5,7 +5,7 @@
 #include <vector>
 #include <ctime>
 #include "GlobalQueue.h"
-#include <ctime>
+#include <unistd.h>
 
 int workerCount = 2;
 int producerCount = 1;
