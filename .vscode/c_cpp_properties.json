@@ -8,10 +8,11 @@
                 "${workspaceFolder}/3rd/**",
                 "/usr/include/**",
                 "${workspaceFolder}/3rd/spdlog/include/**",
-                "${workspaceFolder}/3rd/spdlog/src/**",
+                "${workspaceFolder}/include",
                 "${workspaceFolder}/3rd/spdlog/include",
                 "${workspaceFolder}/include/spdlog",
-                "${workspaceFolder}"
+                "${workspaceFolder}",
+                "${workspaceFolder}/include/ellnet"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++-13",

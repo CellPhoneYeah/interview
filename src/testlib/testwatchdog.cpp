@@ -1,6 +1,6 @@
 #include <iostream>
-#include "slog.h"
-#include "src/watchdog/include/watchdog.h"
+#include "spdlog/slog.h"
+#include "watchdog/watchdog.h"
 
 int main (){
     watchdog wd = new watchdog(1);

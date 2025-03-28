@@ -4,14 +4,14 @@ RM = rm -f
 MKDIR = mkdir -p
 3RD_LIBS_PATH = ../libs
 
-INCLUDE_ARGS = -I ../net/srcs \
+INCLUDE_ARGS = -I ../ellnet/srcs \
 	-I ../watchdog/srcs \
 	-I ../3rd/spdlog/include \
 	-I../include/spdlog \
 	-I../messageQueue/srcs
 
 LIB_PATH = -L../watchdog/objs \
-	-L../net/objs
+	-L../ellnet/objs
 
 
 LIB_ARGS = -lspdlog \

@@ -1,4 +1,4 @@
-#include "watchdog.h"
+#include "watchdog/watchdog.h"
 
 int main(){
     watchdog *wd = new watchdog(1);

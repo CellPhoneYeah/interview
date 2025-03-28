@@ -2,10 +2,7 @@
 
 # message("entrance ${SRC}")
 
-add_executable(entrance ./srcs/entrance.cpp)
+add_executable(entrance entrance.cpp)
 
-target_link_libraries(entrance net)
-target_link_libraries(entrance watchdog)
-
-target_include_directories(entrance PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(entrance PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(entrance ${ELLNET_SO})
+target_link_libraries(entrance ${WATCHDOG_SO})
