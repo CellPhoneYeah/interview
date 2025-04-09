@@ -24,6 +24,6 @@ namespace {
             setup_logger();
         }
     };
-    static InitialSpdlog initialSpdlog;
+    static InitialSpdlog initial_spdlog_;
 }
 #endif

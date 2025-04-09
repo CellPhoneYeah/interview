@@ -1,0 +1,6 @@
+namespace ellnet
+{
+    class netutil
+    {
+    };
+}

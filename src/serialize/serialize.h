@@ -21,15 +21,15 @@ int deserialize(std::string &str, DeserializableType& t){
 template<> \
 std::string inline serialize(Type& t){ \
     std::string ret;\
-    ret.append((const char*)&t, sizeof(Type));\
+    ret.append((const char*)&t, sizeof(t));\
     return ret;\
     }
 
 #define DEF_DESERIALIZE_BASIC_CPP_TYPE(Type) \
 template<> \
 int inline deserialize(std::string &str, Type& t){\
-    memcpy(&t, str.data(), sizeof(Type));\
-    return sizeof(Type);\
+    memcpy(&t, str.data(), sizeof(t));\
+    return sizeof(t);\
 }
 
 #define DEF_SERIALIZE_AND_DESERIALIZE(Type) \

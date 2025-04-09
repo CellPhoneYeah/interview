@@ -6,29 +6,36 @@
 #include <memory>
 #include "slog.h"
 #include <string>
-class watchdog{
-private:
-    static std::mutex allDogs_mutex;
-    static std::unordered_map<int, std::shared_ptr<watchdog>> allDogs;
+namespace ellnet
+{
+    class WatchDog
+    {
+    private:
+        static std::mutex all_dogs_mutex_;
+        static std::unordered_map<int, std::shared_ptr<WatchDog>> all_dogs_;
 
-    std::mutex connections_mutex;
-    int session_id;
-    std::unordered_set<int> connections;
-public:
-    watchdog(watchdog*);
-    watchdog(int session_id);
-    ~watchdog();
-    static std::shared_ptr<watchdog> getDog(int session_id);
-    static void putDog(watchdog*);
-    static void delDog(int session_id);
-    static void clean();
-    static std::string toString();
+        std::mutex connections_mutex_;
+        int session_id_;
+        std::unordered_set<int> connections_;
 
-    int getConn(int fd);
-    void putConn(int fd);
-    void delConn(int fd);
-    int getSessionId()const {return this->session_id;}
-    std::unordered_set<int> getConnections() const{return this->connections;}
-    friend std::ostream& operator<<(std::ostream&, const watchdog& wd);
-};
+    public:
+        WatchDog(WatchDog *);
+        WatchDog(const int session_id);
+        ~WatchDog();
+
+        static std::shared_ptr<WatchDog> GetDog(const int session_id);
+        static void PutDog(WatchDog *);
+        static void DelDog(const int session_id);
+        static void Clean();
+        static std::string ToString();
+
+        int GetConn(const int fd);
+        void PutConn(const int fd);
+        void DelConn(const int fd);
+        int GetSessionId() const { return this->session_id_; }
+        std::unordered_set<int> GetConnections() const { return this->connections_; }
+        friend std::ostream &operator<<(std::ostream &, const WatchDog &wd);
+    };
+}
+
 #endif

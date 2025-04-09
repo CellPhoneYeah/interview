@@ -1,89 +1,94 @@
 #include "watchdog/watchdog.h"
 #include <sstream>
 
-std::unordered_map<int, std::shared_ptr<watchdog>> watchdog::allDogs;
-std::mutex watchdog::allDogs_mutex;
-
-watchdog::watchdog(watchdog *pWD)
+namespace ellnet
 {
-    this->connections = std::unordered_set<int>(pWD->connections);
-}
+    std::unordered_map<int, std::shared_ptr<WatchDog>> WatchDog::all_dogs_;
+    std::mutex WatchDog::all_dogs_mutex_;
 
-watchdog::watchdog(int session_id)
-{
-    this->session_id = session_id;
-    this->connections.clear();
-}
-
-watchdog::~watchdog()
-{
-    this->connections.clear();
-}
-
-std::shared_ptr<watchdog> watchdog::getDog(int session_id)
-{
-    std::lock_guard<std::mutex> lock(allDogs_mutex);
-    auto it = allDogs.find(session_id);
-    return it != allDogs.end() ? it->second : nullptr;
-}
-
-void watchdog::putDog(watchdog * pDog)
-{
-    std::lock_guard<std::mutex> lock(allDogs_mutex);
-    std::shared_ptr<watchdog> spDog = std::make_shared<watchdog>(pDog);
-    allDogs.insert(std::make_pair(pDog->getSessionId(), spDog));
-}
-
-void watchdog::delDog(int session_id)
-{
-    std::lock_guard<std::mutex> lock(allDogs_mutex);
-    allDogs.erase(session_id);
-}
-
-void watchdog::clean()
-{
-    allDogs.clear();
-}
-
-std::string watchdog::toString()
-{
-    std::ostringstream oss;
-    oss.clear();
-    oss << "allDogs:(";
-    for(auto d: allDogs){
-        oss << d.second << ",";
+    WatchDog::WatchDog(WatchDog *pWD)
+    {
+        this->connections_ = std::unordered_set<int>(pWD->connections_);
     }
-    oss << ")";
-    return oss.str();
-}
 
-int watchdog::getConn(int fd)
-{
-    std::lock_guard<std::mutex> lock(connections_mutex);
-    auto it = connections.find(fd);
-    return it == connections.end() ? *it : -1;
-}
-
-void watchdog::putConn(int fd)
-{
-    std::lock_guard<std::mutex> lock(connections_mutex);
-    connections.insert(fd);
-}
-
-void watchdog::delConn(int fd)
-{
-    std::lock_guard<std::mutex> lock(connections_mutex);
-    connections.erase(fd);
-}
-
-std::ostream& operator<<(std::ostream& os, const watchdog &wd)
-{
-    std::ostringstream oss;
-    oss << "(";
-    for(auto it : wd.getConnections()){
-        oss << it << "|";
+    WatchDog::WatchDog(const int session_id)
+    {
+        this->session_id_ = session_id;
+        this->connections_.clear();
     }
-    oss << ")";
-    os << "watch dog<session_id:"<< wd.getSessionId() << "connections:"<< oss.str() << ">";
-    return os;
+
+    WatchDog::~WatchDog()
+    {
+        this->connections_.clear();
+    }
+
+    std::shared_ptr<WatchDog> WatchDog::GetDog(const int session_id)
+    {
+        std::lock_guard<std::mutex> lock(all_dogs_mutex_);
+        auto it = all_dogs_.find(session_id);
+        return it != all_dogs_.end() ? it->second : nullptr;
+    }
+
+    void WatchDog::PutDog(WatchDog *pDog)
+    {
+        std::lock_guard<std::mutex> lock(all_dogs_mutex_);
+        std::shared_ptr<WatchDog> spDog = std::make_shared<WatchDog>(pDog);
+        all_dogs_.insert(std::make_pair(pDog->GetSessionId(), spDog));
+    }
+
+    void WatchDog::DelDog(const int session_id)
+    {
+        std::lock_guard<std::mutex> lock(all_dogs_mutex_);
+        all_dogs_.erase(session_id);
+    }
+
+    void WatchDog::Clean()
+    {
+        all_dogs_.clear();
+    }
+
+    std::string WatchDog::ToString()
+    {
+        std::ostringstream oss;
+        oss.clear();
+        oss << "all_dogs_:(";
+        for (auto d : all_dogs_)
+        {
+            oss << d.second << ",";
+        }
+        oss << ")";
+        return oss.str();
+    }
+
+    int WatchDog::GetConn(const int fd)
+    {
+        std::lock_guard<std::mutex> lock(connections_mutex_);
+        auto it = connections_.find(fd);
+        return it == connections_.end() ? *it : -1;
+    }
+
+    void WatchDog::PutConn(const int fd)
+    {
+        std::lock_guard<std::mutex> lock(connections_mutex_);
+        connections_.insert(fd);
+    }
+
+    void WatchDog::DelConn(const int fd)
+    {
+        std::lock_guard<std::mutex> lock(connections_mutex_);
+        connections_.erase(fd);
+    }
+
+    std::ostream &operator<<(std::ostream &os, const WatchDog &wd)
+    {
+        std::ostringstream oss;
+        oss << "(";
+        for (auto it : wd.GetConnections())
+        {
+            oss << it << "|";
+        }
+        oss << ")";
+        os << "watch dog<session_id:" << wd.GetSessionId() << "connections:" << oss.str() << ">";
+        return os;
+    }
 }

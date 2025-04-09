@@ -1,4 +1,11 @@
-add_executable(testwatchdog testwatchdog.cpp)
 
-target_link_libraries(testwatchdog ${WATCHDOG_SO})
-target_link_libraries(testwatchdog ${SPDLOG_SO})
+add_executable(test_watchdog test_watchdog.cpp)
+
+target_link_libraries(test_watchdog ${WATCHDOG_SO})
+target_link_libraries(test_watchdog ${SPDLOG_SO})
+
+add_executable(entrancetest entrancetest.cc)
+
+target_link_libraries(entrancetest ${ELLNET_SO})
+target_link_libraries(entrancetest ${SPDLOG_SO})
+target_link_libraries(entrancetest ${MESSAGE_QUEUE_A})

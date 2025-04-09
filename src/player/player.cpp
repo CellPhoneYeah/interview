@@ -3,7 +3,7 @@
 //
 
 #include "player.h"
-#include "EllBaseServer.h"
+#include "ellbase_server.h"
 
 player::player(EllBaseServer* pEbs, int id) {
     pEec = new EasyEllConn(pEbs);

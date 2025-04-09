@@ -7,7 +7,7 @@
 
 #include "slog.h"
 
-#include "ellnet/EpollNet.h"
+#include "ellnet/epoll_net.h"
 
 std::atomic<bool> running;
 EpollManager *emgr;

@@ -1,18 +1,22 @@
 #include "watchdog/watchdog.h"
 
-int main(){
-    watchdog *wd = new watchdog(1);
-    wd->putConn(10);
-    wd->putConn(20);
-    wd->putConn(30);
-    watchdog::putDog(wd);
-    SPDLOG_INFO("1 {}", watchdog::toString());
-    wd->delConn(30);
-    watchdog::delDog(1);
-    SPDLOG_INFO("2 {}", watchdog::toString());
-    wd->getConnections();
-    SPDLOG_INFO("wd {}", "test");
-    watchdog::clean();
-    delete(wd);
-    return 0;
+namespace ellnet
+{
+    int main()
+    {
+        WatchDog *wd = new WatchDog(1);
+        wd->PutConn(10);
+        wd->PutConn(20);
+        wd->PutConn(30);
+        WatchDog::PutDog(wd);
+        SPDLOG_INFO("1 {}", WatchDog::ToString());
+        wd->DelConn(30);
+        WatchDog::DelDog(1);
+        SPDLOG_INFO("2 {}", WatchDog::ToString());
+        wd->GetConnections();
+        SPDLOG_INFO("wd {}", "test");
+        WatchDog::Clean();
+        delete (wd);
+        return 0;
+    }
 }
