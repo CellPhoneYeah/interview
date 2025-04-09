@@ -13,3 +13,5 @@ testlib/cle
 **/build
 perf.data
 ./build
+bin/
+objs/
