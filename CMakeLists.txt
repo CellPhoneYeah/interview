@@ -7,6 +7,15 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/objs)
 
 set(CMAKE_BUILD_TYPE Debug)
 
+# 启用调试符号和 -rdynamic
+
+if(UNIX)
+    add_compile_options(-g -rdynamic)
+    find_path(LIBUNWIND_INCLUDE_DIR libunwind.h)
+    find_library(LIBUNWIND_LIBRARY unwind)
+    
+endif()
+
 set(WATCHDOG_SO watchdog)
 set(SPDLOG_SO spdlog)
 set(ELLNET_SO ellnet)
@@ -16,6 +25,8 @@ include_directories(${PROJECT_SOURCE_DIR}/3rd/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/include/spdlog)
 include_directories(${PROJECT_SOURCE_DIR}/include/message_queue)
+include_directories(${PROJECT_SOURCE_DIR}/include/ellnet)
+include_directories(${PROJECT_SOURCE_DIR}/include/common)
 
 link_directories(${PROJECT_SOURCE_DIR}/objs)
 

@@ -10,7 +10,7 @@ inline void setup_logger(){
         auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         auto logger = std::make_shared<spdlog::logger>("console", console_sink);
 
-        logger->set_pattern("%Y-%m-%d %H:%M:%S [%^%l%$] %@ %! - %v");
+        logger->set_pattern("[thread %t]%Y-%m-%d %H:%M:%S [%^%l%$] %@ %! - %v");
 
         spdlog::register_logger(logger);
         spdlog::set_default_logger(logger);

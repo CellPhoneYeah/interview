@@ -14,43 +14,111 @@
 
 #include "slog.h"
 
-#include "ellnet/epoll_event_context.h"
-#include "ellnet/epoll_net.h"
+#include "epoll_event_context.h"
+#include "epoll_net.h"
+#include "epoll_net_header.h"
+
 namespace ellnet
 {
-    std::unordered_map<int, EpollEventContext *> EpollManager::id2contexts_;
+    std::mutex EpollManager::contextMtx;
+    int EpollManager::new_sock_num_ = 0;
+    int EpollManager::close_sock_num_ = 0;
+    int EpollManager::total_accept_num_ = 0;
+    int EpollManager::total_accept_failed_num_ = 0;
+    int EpollManager::connected_num_ = 0;
+    int EpollManager::init_connect_num_ = 0;
+    int EpollManager::init_listen_num_ = 0;
+    int EpollManager::listening_num_ = 0;
 
-    void EpollManager::AddContext(EpollEventContext *eec)
+    std::unordered_map<int, EpollEventContext *> EpollManager::sessionId2contexts_;
+    std::unordered_map<int, EpollEventContext *> EpollManager::fd2contexts_;
+
+    int EpollManager::NewFdAndBindContext()
     {
-        int id = eec->GetId();
-        int fd = eec->GetFd();
-        EpollEventContext *pCtx = id2contexts_[id];
-        if (pCtx != nullptr)
-        {
-            SPDLOG_WARN("repeat insert contex {} !!!", id);
-        }
-        id2contexts_[id] = eec;
-        fd2contexts_[fd] = eec;
-        SPDLOG_INFO("add id {} fd {} left ctx {}", id, fd, id2contexts_.size());
+        int newFd = SysNewFd();
+        EpollEventContext *newCtx = new EpollEventContext(newFd);
+        SPDLOG_INFO("create new ctx and bind {}", newCtx->GetSessionId());
+        AddContext(newCtx);
+        return newCtx->GetSessionId();
     }
 
-    void EpollManager::DelContext(const int id)
+    void EpollManager::AddContext(EpollEventContext *pCtx)
     {
-        auto it = id2contexts_.find(id);
-        if (it != id2contexts_.end())
+        std::unique_lock<std::mutex> lock(contextMtx);
+        int id = pCtx->GetSessionId();
+        int fd = pCtx->GetFd();
+        EpollEventContext *oldPCtx = sessionId2contexts_[id];
+        if (oldPCtx != nullptr)
         {
-            int fd = it->second->GetFd();
-            delete (it->second);
+            SPDLOG_WARN("repeat insert contex {} !!!", id);
+            throw std::runtime_error("repeat insert contex");
+        }
+        OnAddContext(pCtx);
+        sessionId2contexts_[id] = pCtx;
+        fd2contexts_[fd] = pCtx;
+        SPDLOG_INFO("add id {} fd {} left ctx {}", id, fd, sessionId2contexts_.size());
+    }
+
+    void EpollManager::OnAddContext(EpollEventContext *pCtx)
+    {
+        switch (pCtx->GetState())
+        {
+        case SocketState::CONNECT_WAIT_OPEN:
+            init_connect_num_++;
+            break;
+
+        case SocketState::LISTEN_WAIT_OPEN:
+            init_listen_num_++;
+            break;
+
+        case SocketState::PIPE_LISTENING:
+            SPDLOG_INFO("epoll manager pipe added {}", pCtx->GetSessionId());
+            break;
+
+        case SocketState::CLOSED:
+            break;
+
+        default:
+            SPDLOG_ERROR("unknow new EpollEventContext state {}", (int)pCtx->GetState());
+            break;
+        }
+    }
+
+    void EpollManager::OnDelContext(EpollEventContext* pCtx){
+        if (pCtx != nullptr)
+        {
+            if (pCtx->IsListening())
+            {
+                listening_num_--;
+            }
+            if (pCtx->IsConnecting())
+            {
+                init_connect_num_--;
+            }
+            connected_num_--;
+        }
+    }
+
+    void EpollManager::DelContext(const int sessionId)
+    {
+        std::unique_lock<std::mutex> lock(contextMtx);
+        auto it = sessionId2contexts_.find(sessionId);
+        if (it != sessionId2contexts_.end())
+        {
+            EpollEventContext* pCtx = it->second;
+            OnDelContext(pCtx);
+            int fd = pCtx->GetFd();
+            delete (pCtx);
             delete fd2contexts_.find(fd)->second;
             fd2contexts_.erase(fd);
         }
-        id2contexts_.erase(id);
-        SPDLOG_INFO("del id {} left ctx {}", id, id2contexts_.size());
+        sessionId2contexts_.erase(sessionId);
+        SPDLOG_INFO("del id {} left ctx {}", sessionId, sessionId2contexts_.size());
     }
-    EpollEventContext *EpollManager::GetContext(const int id)
+    EpollEventContext *EpollManager::GetContext(const int sessionId)
     {
-        auto it = id2contexts_.find(id);
-        if (it == id2contexts_.end())
+        auto it = sessionId2contexts_.find(sessionId);
+        if (it == sessionId2contexts_.end())
         {
             return nullptr;
         }
@@ -67,27 +135,27 @@ namespace ellnet
 
     EpollManager::~EpollManager()
     {
-        if (id2contexts_.size() == 0)
+        if (sessionId2contexts_.size() == 0)
         {
             return;
         }
-        auto it = id2contexts_.begin();
+        auto it = sessionId2contexts_.begin();
         int cur_id;
-        while (it != id2contexts_.end())
+        while (it != sessionId2contexts_.end())
         {
             cur_id = it->first;
             
-            EpollEventContext *pCtx = id2contexts_[cur_id];
+            EpollEventContext *pCtx = sessionId2contexts_[cur_id];
             if (pCtx != nullptr)
             {
                 delete (pCtx);
             }
             SPDLOG_INFO("del context {}", cur_id);
             SysCloseFd(pCtx->GetFd());
-            it = id2contexts_.find(cur_id);
-            if (it != id2contexts_.end())
+            it = sessionId2contexts_.find(cur_id);
+            if (it != sessionId2contexts_.end())
             {
-                it = id2contexts_.erase(it);
+                it = sessionId2contexts_.erase(it);
             }
         }
     }
@@ -99,11 +167,8 @@ namespace ellnet
         total_accept_num_ = 0;
         total_accept_failed_num_ = 0;
         connected_num_ = 0;
-        connecting_num_ = 0;
+        init_connect_num_ = 0;
         listening_num_ = 0;
-
-        new_sock_num_ = 0;
-        close_sock_num_ = 0;
 
         NewPipe(pipe_in_fd);
         SPDLOG_INFO("epollmanager init {} ", epoll_fd_);
@@ -128,9 +193,9 @@ namespace ellnet
 
     int EpollManager::LivingCount()
     {
-        auto it = id2contexts_.begin();
+        auto it = sessionId2contexts_.begin();
         int count = 0;
-        while (it != id2contexts_.end())
+        while (it != sessionId2contexts_.end())
         {
             if (!it->second->IsDead())
             {
@@ -144,15 +209,16 @@ namespace ellnet
     bool EpollManager::NewPipe(const int pipe_fd)
     {
         struct epoll_event ev;
-        EpollEventContext *newCtx = new EpollEventContext(pipe_fd);
+        EpollEventContext *newCtx = new EpollEventContext(pipe_fd, SocketState::PIPE_LISTENING);
         newCtx->SetPipe();
-        this->AddContext(newCtx);
+        AddContext(newCtx);
         ev.events = EPOLLIN | EPOLLET;
         ev.data.ptr = newCtx;
-        EpollEventContext::SetNoblocking(pipe_fd);
+        newCtx->SetNoblocking();
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, pipe_fd, &ev) < 0)
         {
             SPDLOG_WARN("new pipe failed {} {} {}", strerror(errno), epoll_fd_, pipe_fd);
+            ::close(pipe_fd);
             return false;
         }
         return true;
@@ -171,14 +237,18 @@ namespace ellnet
 
     void EpollManager::StartManager(const int pipe_fd)
     {
+        try{
         EpollManager *emgr = new EpollManager(pipe_fd);
         emgr->Run();
+        }catch(std::exception e){
+            SPDLOG_ERROR("Start Manager  run failed : {}", e.what());
+        }
     }
 
     int EpollManager::ListeningFd(std::string &addr, const int port)
     {
-        auto it = id2contexts_.begin();
-        while (it != id2contexts_.end())
+        auto it = sessionId2contexts_.begin();
+        while (it != sessionId2contexts_.end())
         {
             if (it->second->IsListening(addr, port))
             {
@@ -189,76 +259,148 @@ namespace ellnet
         return -1;
     }
 
-    int EpollManager::StartListen(std::string ip_str, const int port)
+    int EpollManager::InitListen(const ControlCommand cmd)
     {
-        SPDLOG_INFO("StartListen {}:{} ", ip_str, port);
+        if(cmd.sessionId <= 0){
+            SPDLOG_ERROR("InitListen with illegal sessionId {}", cmd.sessionId);
+            return -1;
+        }
+        if(cmd.ipaddr == nullptr){
+            SPDLOG_ERROR("InitListen with a empty ipaddr");
+            return -2;
+        }
+        if(cmd.port <= 0){
+            SPDLOG_ERROR("InitListen with illegal port {}", cmd.port);
+            return -3;
+        }
+        const int sessionId = cmd.sessionId;
+        const char* ipaddr = cmd.ipaddr;
+        const int port = cmd.port;
+        EpollEventContext* ctx = GetContext(sessionId);
+        if(ctx == nullptr){
+            SPDLOG_ERROR("can not get a ctx for sessionId {} to init listen", sessionId);
+            return -4;
+        }
+        SPDLOG_INFO("Init Listen {}:{} ", ipaddr, port);
         struct sockaddr_in addr;
         socklen_t len = sizeof(addr);
         addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = inet_addr(ip_str.c_str());
-
+        addr.sin_addr.s_addr = inet_addr(ipaddr);
         addr.sin_port = htons(port);
-        int listenfd = SysNewFd();
+        int listenfd = ctx->GetFd();
+        if (addr.sin_addr.s_addr == INADDR_NONE)
+        {
+            SPDLOG_INFO("invalid ip addr ", ipaddr);
+            DelContext(sessionId);
+            SysCloseFd(listenfd);
+            return -5;
+        }
+        
         int opt;
         if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0)
         {
             SPDLOG_INFO("sock set reuse failed {} !", strerror(errno));
             return -6;
         }
-        if (listenfd < 0)
-        {
-            SPDLOG_INFO("sock create failed", strerror(errno));
-            return -1;
-        }
         if (bind(listenfd, (sockaddr *)&addr, len) < 0)
         {
             SPDLOG_INFO("sock bind failed:{}", strerror(errno));
+            return -7;
+        }
+        std::string str(cmd.ipaddr);
+        ctx->SetAddrPort(str, port);
+
+        return 0;
+    }
+
+    int EpollManager::StartListen(ControlCommand cmd)
+    {
+        if(cmd.sessionId <= 0){
+            SPDLOG_ERROR("InitListen with illegal sessionId {}", cmd.sessionId);
+            return -1;
+        }
+        const int sessionId = cmd.sessionId;
+        EpollEventContext* ctx = GetContext(sessionId);
+        if(ctx == nullptr){
+            SPDLOG_ERROR("can not get a ctx for sessionId {} to start listen", sessionId);
             return -2;
         }
-
-        if (addr.sin_addr.s_addr == INADDR_NONE)
-        {
-            SPDLOG_INFO("invalid ip addr ", ip_str);
-            SysCloseFd(listenfd);
-            return -4;
-        }
+        
+        int listenfd = ctx->GetFd();
 
         // SOMAXCONN is important
         if (listen(listenfd, SOMAXCONN) < 0)
         {
             SPDLOG_INFO("listen failed ", strerror(errno));
-            return -5;
+            return -3;
         }
 
         struct epoll_event ev;
-        EpollEventContext *newCtx = new EpollEventContext(listenfd, true);
-        newCtx->SetAddrPort(ip_str, port);
-        AddContext(newCtx);
         ev.events = EPOLLIN | EPOLLET;
-        ev.data.ptr = newCtx;
-        EpollEventContext::SetNoblocking(listenfd);
+        ev.data.ptr = ctx;
+        ctx->SetNoblocking();
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, listenfd, &ev) < 0)
         {
-            DelContext(listenfd);
-            SPDLOG_INFO("stop listen fd");
-            return -3;
+            CloseFdAndDelCtx(sessionId);
+            SPDLOG_INFO("stop listen fd {}", listenfd);
+            return -4;
         }
-        SPDLOG_INFO("{} listen to fd ", listenfd);
-        listening_num_++;
-        last_tick_ = std::time(nullptr);
+        ChangeCtxState(ctx, LISTENING);
+        SPDLOG_INFO("listen to fd {}", listenfd);
         return 0;
     }
 
-    int EpollManager::StopListen(std::string addr, const int port)
+    int EpollManager::CloseSocket(const ControlCommand cmd)
     {
-        int fd = ListeningFd(addr, port);
-        if (fd < 0)
-        {
-            return 0;
+        if(cmd.sessionId <= 0){
+            SPDLOG_ERROR("CloseSocket with illegal sessionId {}", cmd.sessionId);
+            return -1;
         }
-        CloseFd(fd);
+        const int sessionId = cmd.sessionId;
+        EpollEventContext* ctx = GetContext(sessionId);
+        if(ctx == nullptr){
+            SPDLOG_ERROR("not found a ctx for sessionId {} to close ", sessionId);
+            return -2;
+        }
+        
+        int listenfd = ctx->GetFd();
+
+        switch (ctx->GetState())
+        {
+        case PIPE_LISTENING:
+            SPDLOG_ERROR("can not close pipe session {} for cmd !", sessionId);
+            return -4;
+        case CLOSED:
+            SPDLOG_ERROR("session {} has been closed, can not repeat close a socket!", sessionId);
+            return -5;
+        case LISTEN_WAIT_OPEN:
+            SPDLOG_ERROR("to close a session {} whitch waiting listen open!", sessionId);
+            CloseFdAndDelCtx(sessionId);
+            break;
+
+        case CONNECT_WAIT_OPEN:
+            SPDLOG_ERROR("to close a session {} whitch waiting connect open!", sessionId);
+            CloseFdAndDelCtx(sessionId);
+            break;
+
+        case LISTENING:
+            SPDLOG_ERROR("to close a session {} whitch listening!", sessionId);
+            CloseFdAndDelCtx(sessionId);
+            break;
+
+        case CONNECTED:
+            SPDLOG_ERROR("to close a session {} whitch connected!", sessionId);
+            CloseFdAndDelCtx(sessionId);
+            break;
+
+        default:
+            SPDLOG_ERROR("unknow state {} to close!", (int)ctx->GetState());
+            return -6;
+        }
+        return 0;
     }
 
+    // 假如connect使用非阻塞模式，需要监听到out事件来感知连接建立完成
     int EpollManager::OpenConnection(int id)
     {
         EpollEventContext* ctx = GetContext(id);
@@ -268,14 +410,18 @@ namespace ellnet
         }
         struct sockaddr_in addr;
         addr.sin_family = AF_INET;
-        inet_pton(AF_INET, ctx->.c_str(), &addr.sin_addr);
-        addr.sin_port = htons(port);
+        if(ctx->GetIpAddr().empty()){
+            SPDLOG_ERROR("open connection failed case ipaddr empty {}", id);
+            return -1;
+        }
+        inet_pton(AF_INET, ctx->GetIpAddr().c_str(), &addr.sin_addr);
+        addr.sin_port = htons(ctx->GetPort());
         int client_fd = SysNewFd();
         socklen_t addrlen = sizeof(addr);
         int ret = connect(client_fd, (const sockaddr *)&addr, addrlen);
         if (ret == -1 && errno != EINPROGRESS)
         {
-            SPDLOG_INFO("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ip_str, port, ret, errno);
+            SPDLOG_INFO("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ctx->GetIpAddr(), ctx->GetPort(), ret, strerror(errno));
             return -1;
         }
         if (ret == 0)
@@ -283,89 +429,146 @@ namespace ellnet
             SPDLOG_INFO("connect finish {}", client_fd);
             struct epoll_event ev;
             ev.events = EPOLLIN | EPOLLET; // 已经完成连接，直接开始接收数据
-            EpollEventContext *ctx = new EpollEventContext(client_fd, false);
-            ctx->ConnectFinish();
+            ctx->SetFd(client_fd);
+            ChangeCtxState(ctx, CONNECTED);
+            ctx->finishOpen();
             ev.data.ptr = ctx;
             if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) < 0)
             {
                 epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
             }
             connected_num_++;
-            AddContext(ctx);
         }
         else
         {
             struct epoll_event ev;
             ev.events = EPOLLOUT | EPOLLET;
-            EpollEventContext *ctx = new EpollEventContext(client_fd, false);
             ctx->ConnectStart();
+            ctx->finishOpen();
             ev.data.ptr = ctx;
             if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) < 0)
             {
                 epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
             }
-            AddContext(ctx);
-            connecting_num_++;
+            init_connect_num_++;
             SPDLOG_INFO("waiting connect {}", client_fd);
         }
 
         return client_fd;
     }
 
-    int EpollManager::ConnectTo(std::string ip_str, const int port)
-    {
-        struct sockaddr_in addr;
-        addr.sin_family = AF_INET;
-        inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr);
-        addr.sin_port = htons(port);
-        int client_fd = SysNewFd();
-        socklen_t addrlen = sizeof(addr);
-        int ret = connect(client_fd, (const sockaddr *)&addr, addrlen);
-        if (ret == -1 && errno != EINPROGRESS)
+
+    int EpollManager::InitConnect(const ControlCommand cmd){
+        try
         {
-            SPDLOG_INFO("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ip_str, port, ret, errno);
-            return -1;
-        }
-        if (ret == 0)
-        {
-            SPDLOG_INFO("connect finish {}", client_fd);
-            struct epoll_event ev;
-            ev.events = EPOLLIN | EPOLLET; // 已经完成连接，直接开始接收数据
-            EpollEventContext *ctx = new EpollEventContext(client_fd, false);
-            ctx->ConnectFinish();
-            ev.data.ptr = ctx;
-            if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) < 0)
+            const std::string ip_str(cmd.ipaddr);
+            const int port = cmd.port;
+            const int sessionId = cmd.sessionId;
+            if (cmd.sessionId <= 0)
             {
-                epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
+                SPDLOG_ERROR("InitConnect with illegal sessionId {}", sessionId);
+                return -1;
             }
-            connected_num_++;
-            AddContext(ctx);
-        }
-        else
-        {
-            struct epoll_event ev;
-            ev.events = EPOLLOUT | EPOLLET;
-            EpollEventContext *ctx = new EpollEventContext(client_fd, false);
-            ctx->ConnectStart();
-            ev.data.ptr = ctx;
-            if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) < 0)
+            if (ip_str.empty())
             {
-                epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
+                SPDLOG_ERROR("InitConnect with empty ip {}", ip_str);
+                return -2;
             }
-            AddContext(ctx);
-            connecting_num_++;
-            SPDLOG_INFO("waiting connect {}", client_fd);
+            if (port <= 0)
+            {
+                SPDLOG_ERROR("InitConnect with illegal port {}", port);
+                return -3;
+            }
+            EpollEventContext *ctx = GetContext(sessionId);
+            if (ctx == nullptr)
+            {
+                SPDLOG_ERROR("InitConnect can not find ctx for session {}", sessionId);
+                return -4;
+            }
+            struct sockaddr_in addr;
+            addr.sin_family = AF_INET;
+            inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr);
+            addr.sin_port = htons(port);
+
+            int client_fd = ctx->GetFd();
+            socklen_t addrlen = sizeof(addr);
+            ctx->SetBlocking();
+            int ret = connect(client_fd, (const sockaddr *)&addr, addrlen);
+            if (ret == -1 && errno != EINPROGRESS)
+            {
+                SPDLOG_INFO("{} connect to {}:{} ret:{} errno {} failed!", client_fd, ip_str, port, ret, strerror(errno));
+                return -5;
+            }
+            // 创建连接后，不注册事件到epoll，需要等待StartConnect再开始监听事件
+            if (ret == 0)
+            {
+                SPDLOG_INFO("connect to finish {}", client_fd);
+                ctx->SetNoblocking(); // 建立连接完成后再使用非阻塞模式
+            }
+            else
+            {
+                SPDLOG_INFO("connect failed {}", ret);
+                CloseFdAndDelCtx(sessionId);
+                return -6;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            SPDLOG_ERROR("init connect failed {}", e.what());
+            return -7;
         }
 
-        return client_fd;
+        return 0;
+    }
+
+    // InitConnect 已经初始了Context的上下文，只需要将fd注册事件到epoll
+    int EpollManager::StartConnect(const ControlCommand cmd)
+    {
+        try
+        {
+            SPDLOG_INFO("StartConnect ");
+            const int sessionId = cmd.sessionId;
+            if (sessionId <= 0)
+            {
+                SPDLOG_ERROR("StartConnect with illegal sessionId {}", sessionId);
+                return -1;
+            }
+            SPDLOG_INFO("StartConnect ");
+            EpollEventContext *ctx = GetContext(sessionId);
+            if (ctx == nullptr)
+            {
+                SPDLOG_ERROR("StartConnect can not find ctx for session {}", sessionId);
+                return -2;
+            }
+            SPDLOG_INFO("StartConnect ");
+            const int client_fd = ctx->GetFd();
+            struct epoll_event ev;
+            ev.events = EPOLLIN | EPOLLET; // 已经完成连接，直接开始接收数据
+            ev.data.ptr = ctx;
+            if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) < 0)
+            {
+                SPDLOG_INFO("StartConnect ");
+                epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
+            }
+            ChangeCtxState(ctx, CONNECTED);
+            SPDLOG_INFO("StartConnect ");
+
+            return 0;
+        }
+        catch (std::exception e)
+        {
+            SPDLOG_ERROR("StartConnect failed {}", e.what());
+            return -3;
+        }
     }
 
     int EpollManager::Loop()
     {
         int Loopcount = 0;
-        for(;;)
+        for (;;)
         {
-            if(!IsRunning()){
+            if (!IsRunning())
+            {
                 break;
             }
             Loopcount++;
@@ -377,77 +580,85 @@ namespace ellnet
                 oss << std::this_thread::get_id();
                 SPDLOG_INFO(
                     " connection total :{} listening: {} connected:{} connecting:{} living:{} thread:{}",
-                    id2contexts_.size(),
+                    sessionId2contexts_.size(),
                     listening_num_,
                     connected_num_,
-                    connecting_num_,
+                    init_connect_num_,
                     LivingCount(),
-                    oss.str()
-                );
+                    oss.str());
             }
-            struct epoll_event ev_list[kMaxEpollEventNum];
-            int eventn = epoll_wait(epoll_fd_, ev_list, kMaxEpollEventNum, -1); //阻塞直到有事件到达
-            if (eventn < 0)
+            try
             {
-                if (errno == EINTR)
+                struct epoll_event ev_list[kMaxEpollEventNum];
+                int eventn = epoll_wait(epoll_fd_, ev_list, kMaxEpollEventNum, -1); // 阻塞直到有事件到达
+                if (eventn < 0)
                 {
-                    // 信号中断
-                    SPDLOG_INFO("epoll break by signal ");
+                    if (errno == EINTR)
+                    {
+                        // 信号中断
+                        SPDLOG_INFO("epoll break by signal ");
+                        continue;
+                    }
+                    SPDLOG_INFO("epoll wait err:{}", std::strerror(errno));
+                    break;
+                }
+                if (eventn == 0)
+                {
+                    SPDLOG_INFO("epoll nothing to do ");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                     continue;
                 }
-                SPDLOG_INFO("epoll wait err:{}", std::strerror(errno));
-                break;
-            }
-            if (eventn == 0)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-            for (int i = 0; i < eventn; i++)
-            {
-                struct epoll_event ev = ev_list[i];
-                EpollEventContext *ctx = (EpollEventContext *)ev.data.ptr;
-                if (ev.events & EPOLLIN)
+                for (int i = 0; i < eventn; i++)
                 {
-                    if (ctx->IsListening())
+                    struct epoll_event ev = ev_list[i];
+                    EpollEventContext *ctx = (EpollEventContext *)ev.data.ptr;
+                    if (ev.events & EPOLLIN)
                     {
-                        DoAccept(ev, ctx);
+                        if (ctx->IsListening())
+                        {
+                            DoAccept(ev, ctx);
+                        }
+                        else if (ctx->IsPipe())
+                        {
+                            DoReadPipe(ctx);
+                        }
+                        else
+                        {
+                            DoRead(ctx);
+                        }
                     }
-                    else if (ctx->IsPipe())
+                    else if (ev.events & EPOLLOUT)
                     {
-                        DoReadPipe(ctx);
-                    }
-                    else
-                    {
-                        DoRead(ctx);
-                    }
-                }
-                else if (ev.events & EPOLLOUT)
-                {
-                    if (ctx->IsConnecting())
-                    {
-                        DoConn(ev, ctx);
-                    }
-                    else
-                    {
+                        // if (ctx->IsConnecting())
+                        // {
+                        //     DoConn(ev, ctx);
+                        // }
+                        // else
+                        // {
                         DoSend(ev, ctx);
+                        // }
+                    }
+                    else if (ev.events & EPOLLERR)
+                    {
+                        SPDLOG_WARN("epoll err {}", ctx->GetFd());
+                        CloseFdAndDelCtx(ctx->GetFd());
+                    }
+                    else if (ev.events & EPOLLHUP)
+                    {
+                        SPDLOG_WARN("{} epoll wait found remote closed sock {}", i, ctx->GetFd());
+                        CloseFdAndDelCtx(ctx->GetFd());
+                    }
+                    else
+                    {
+                        SPDLOG_WARN("other event ");
+                        CloseFdAndDelCtx(ctx->GetFd());
                     }
                 }
-                else if (ev.events & EPOLLERR)
-                {
-                    SPDLOG_WARN("epoll err {}", ctx->GetFd());
-                    CloseFd(ctx->GetFd());
-                }
-                else if (ev.events & EPOLLHUP)
-                {
-                    SPDLOG_WARN("{} epoll wait found remote closed sock {}", i, ctx->GetFd());
-                    CloseFd(ctx->GetFd());
-                }
-                else
-                {
-                    SPDLOG_WARN("other event ");
-                    CloseFd(ctx->GetFd());
-                }
+            }
+            catch (std::exception e)
+            {
+                SPDLOG_ERROR("epoll loop err {}", e.what());
+                break;
             }
         }
         return 0;
@@ -482,14 +693,14 @@ namespace ellnet
                 {
                     total_accept_failed_num_++;
                     SPDLOG_INFO("file fd limit success {} failed {}", total_accept_num_, total_accept_failed_num_);
-                    CloseFd(currentFd);
+                    CloseFdAndDelCtx(currentFd);
                     break;
                 }
                 if (errno == ENFILE)
                 {
                     total_accept_failed_num_++;
                     SPDLOG_INFO("out of fd success {} failed {}", total_accept_num_, total_accept_failed_num_);
-                    CloseFd(currentFd);
+                    CloseFdAndDelCtx(currentFd);
                     break;
                 }
                 if (errno == EINTR)
@@ -500,7 +711,7 @@ namespace ellnet
                 }
                 total_accept_failed_num_++;
                 SPDLOG_INFO("unexpect err:{} success {} failed {}", errno, total_accept_num_, total_accept_failed_num_);
-                CloseFd(currentFd);
+                CloseFdAndDelCtx(currentFd);
                 break;
             }
             else
@@ -509,12 +720,13 @@ namespace ellnet
                 EpollEventContext *newCtx = new EpollEventContext(newFd, false);
                 ev.data.ptr = newCtx;
                 ev.events = flag;
-                EpollEventContext::SetNoblocking(newFd);
+                newCtx->SetNoblocking();
                 if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, newFd, &ev) != 0)
                 {
                     SPDLOG_INFO("accept modify new fd ");
                     epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, newFd, &ev);
                 }
+                SPDLOG_INFO("accept and create new Ctx {} ", newCtx->GetSessionId());
                 AddContext(newCtx);
                 char newIP[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &addr.sin_addr, newIP, 10);
@@ -528,8 +740,9 @@ namespace ellnet
 
     void EpollManager::DoRead(EpollEventContext *ctx)
     {
-        int current_fd = ctx->GetFd();
-        EpollEventContext::SetNoblocking(current_fd);
+        const int current_fd = ctx->GetFd();
+        const int sessionId = ctx->GetSessionId();
+        ctx->SetNoblocking();
         while (1)
         {
             int read_bytes = recv(current_fd, ctx->read_buffer_.data() + ctx->offset_pos_, kMaxEpollReadSize, 0);
@@ -537,7 +750,7 @@ namespace ellnet
             {
                 // 断开连接
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, current_fd, nullptr);
-                EpollManager::DelContext(current_fd);
+                EpollManager::DelContext(sessionId);
                 connected_num_--;
                 SPDLOG_INFO(" close fd {}", current_fd);
                 return;
@@ -553,7 +766,7 @@ namespace ellnet
                 {
                     // 对端关闭连接
                     SPDLOG_INFO("remote close connect when recving {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 if (errno == EINTR)
@@ -566,40 +779,42 @@ namespace ellnet
                 if (errno == EBADF)
                 {
                     SPDLOG_WARN("bad fd {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 if (errno == ENOTCONN)
                 {
                     // 已经关闭的连接未从epoll移除可能出现
                     SPDLOG_WARN("old closed epoll fd not del {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
-                SPDLOG_WARN("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, errno, ctx->read_buffer_.data(), ctx->offset_pos_);
-                CloseFd(current_fd);
+                SPDLOG_WARN("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, strerror(errno), ctx->read_buffer_.data(), ctx->offset_pos_);
+                CloseFdAndDelCtx(sessionId);
                 return;
             }
             ctx->ReadBytes(read_bytes);
         }
     }
 
+    // 非阻塞模式connect完成创建连接时出发out事件的处理逻辑
     void EpollManager::DoConn(epoll_event &ev, EpollEventContext *ctx)
     {
         int currentFd = ctx->GetFd();
+        const int sessionId = ctx->GetSessionId();
         int errcode;
         socklen_t len = sizeof(errcode);
         // SPDLOG_INFO("do connect {}", currentFd);
         if (getsockopt(currentFd, SOL_SOCKET, SO_ERROR, &errcode, &len) == -1)
         {
             SPDLOG_INFO("connect failed {} err {}", currentFd, strerror(errno));
-            CloseFd(currentFd);
+            CloseFdAndDelCtx(sessionId);
             return;
         }
         if (errcode != 0)
         {
             SPDLOG_ERROR("connecting failed {} {}", currentFd, strerror(errcode));
-            CloseFd(currentFd);
+            CloseFdAndDelCtx(sessionId);
             return;
         }
         ev.events = EPOLLIN | EPOLLET;
@@ -609,15 +824,14 @@ namespace ellnet
             return;
         }
         // SPDLOG_INFO("epoll connect finished fd {}", currentFd);
-        ctx->ConnectFinish();
-        connecting_num_--;
-        connected_num_++;
+        ChangeCtxState(ctx, CONNECTED);
     }
 
     void EpollManager::DoSend(epoll_event &ev, EpollEventContext *ctx)
     {
-        int current_fd = ctx->GetFd();
-        EpollEventContext::SetNoblocking(current_fd);
+        const int current_fd = ctx->GetFd();
+        const int sessionId = ctx->GetSessionId();
+        ctx->SetNoblocking();
         while (1)
         {
             if (ctx->send_q_.size() == 0)
@@ -625,8 +839,8 @@ namespace ellnet
                 ev.events &= ~EPOLLOUT;
                 if (epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, current_fd, &ev) < 0)
                 {
-                    SPDLOG_INFO(" modify fd failed {}", errno);
-                    CloseFd(epoll_fd_);
+                    SPDLOG_INFO(" modify fd failed {}", strerror(errno));
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 ctx->ClearSendQ();
@@ -648,28 +862,28 @@ namespace ellnet
                 {
                     // 对方关闭连接
                     SPDLOG_INFO(" remote closed when send msg {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 if (errno == ENOTSOCK)
                 {
                     SPDLOG_INFO(" send target not a fd {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 if (errno == EINVAL)
                 {
                     SPDLOG_INFO(" some args is wrong when send to fd {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
                 if (errno == ECONNRESET)
                 {
                     SPDLOG_INFO(" remote reset when send to fd {}", current_fd);
-                    CloseFd(current_fd);
+                    CloseFdAndDelCtx(sessionId);
                     return;
                 }
-                SPDLOG_INFO(" unexpected err when send to fd {} err {}", current_fd, errno);
+                SPDLOG_INFO(" unexpected err when send to fd {} err {}", current_fd, strerror(errno));
                 return;
             }
             if (sent < (int)msg.size())
@@ -688,11 +902,16 @@ namespace ellnet
         int pipe_fd = ctx->GetFd();
         while (1)
         {
+            if (!IsRunning())
+            {
+                return;
+            }
             int n = read(pipe_fd, &cmd, sizeof(cmd));
             if (n == 0)
             {
                 SPDLOG_INFO("reader pipe closed {}", pipe_fd);
                 close(pipe_fd);
+                // todo if or not close entire epoll manager
                 return;
             }
             if (n < 0)
@@ -706,67 +925,106 @@ namespace ellnet
             SPDLOG_INFO("read from pipe {}", (int)cmd.cmd);
             switch (cmd.cmd)
             {
+            case CommandType::CMD_INIT_LISTEN:
+            {
+                SPDLOG_INFO("{} init listen {}:{}", cmd.sessionId, cmd.ipaddr, cmd.port);
+                int ret = InitListen(cmd);
+                if (ret != 0)
+                {
+                    SPDLOG_ERROR("{} {}:{} init listen failed {}", cmd.sessionId, cmd.ipaddr, cmd.port, ret);
+                }
+                break;
+            }
+
+            case CommandType::CMD_INIT_CONNECT:
+            {
+                SPDLOG_INFO("init connect {} {}:{}", cmd.sessionId, cmd.ipaddr, cmd.port);
+                int ret = InitConnect(cmd);
+                if (ret != 0)
+                {
+                    SPDLOG_ERROR("{} {}:{} init connect failed {}", cmd.sessionId, cmd.ipaddr, cmd.port, ret);
+                }
+                break;
+            }
+
+            case CommandType::CMD_CLOSE:
+            {
+                SPDLOG_INFO("stop listen {}:{}", cmd.ipaddr, cmd.port);
+                int ret = CloseSocket(cmd);
+                if (ret != 0)
+                {
+                    SPDLOG_ERROR("{} close failed {}", cmd.sessionId, ret);
+                }
+                break;
+            }
+
             case CommandType::CMD_START_LISTEN:
-                SPDLOG_INFO("start listen");
-                StartListen(cmd.ipaddr, cmd.port);
+            {
+                SPDLOG_INFO("start listen {}", cmd.sessionId);
+                int ret = StartListen(cmd);
+                if (ret != 0)
+                {
+                    SPDLOG_ERROR("{} start listen failed {}", cmd.sessionId, ret);
+                }
                 break;
+            }
 
-            case CommandType::CMD_STOP_LISTEN:
-                SPDLOG_INFO("stop listen");
-                StopListen(cmd.ipaddr, cmd.port);
+            case CommandType::CMD_START_CONNECT:
+            {
+                SPDLOG_INFO("connect {}:{}", cmd.ipaddr, cmd.port);
+                int ret = StartConnect(cmd);
+                if (ret != 0)
+                {
+                    SPDLOG_ERROR("{} start connect failed {}", cmd.sessionId, ret);
+                }
                 break;
-
-            case CommandType::CMD_CONNECT_TO:
-                SPDLOG_INFO("connect");
-                ConnectTo(cmd.ipaddr, cmd.port);
-                break;
-
-            case CommandType::CMD_OPEN_CONNECT:
-                break;
-
-            case CommandType::CMD_DISCONNECT:
-                SPDLOG_INFO("disconnect");
-                break;
+            }
 
             case CommandType::CMD_EXIT:
+            {
                 SPDLOG_INFO("exit");
+                Stop();
                 break;
+            }
+
+            case CommandType::CMD_SEND_MSG:
+            {
+                SPDLOG_INFO("send msg {}", cmd.sessionId);
+                int ret = SendMsg(cmd);
+                if(ret != 0){
+                    SPDLOG_ERROR("{} send msg failed {}", cmd.sessionId, ret);
+                }
+                break;
+            }
 
             default:
+            {
                 SPDLOG_INFO("unknow cmd:{}", (int)cmd.cmd);
                 break;
             }
+            }
         }
     }
 
-    void EpollManager::CloseFd(const int fd)
+    void EpollManager::CloseFdAndDelCtx(const int sessionId)
     {
+        EpollEventContext *pCtx = GetContext(sessionId);
+        const int fd = pCtx->GetFd();
         epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
         SysCloseFd(fd);
-        EpollEventContext *pCtx = GetContext(fd);
-        if (pCtx != nullptr)
-        {
-            if (pCtx->IsListening())
-            {
-                listening_num_--;
-            }
-            if (pCtx->IsConnecting())
-            {
-                connecting_num_--;
-            }
-            connected_num_--;
-        }
-        DelContext(fd);
+        DelContext(sessionId);
     }
 
-    bool EpollManager::SendMsg(const int fd, const char *msg, const int size)
+    int EpollManager::SendMsg(const ControlCommand cmd)
     {
-        EpollEventContext *ctx = GetContext(fd);
+        SPDLOG_INFO("{} handling SendMsg cmd {}", cmd.sessionId, cmd.msg);
+        EpollEventContext *ctx = GetContext(cmd.sessionId);
         if (ctx == nullptr)
         {
             return false;
         }
-        ctx->PushMsgQ(msg, size);
+        const int fd = ctx->GetFd();
+        ctx->PushMsgQ(cmd.msg, cmd.msgSize);
         struct epoll_event ev;
         ev.data.ptr = ctx;
         ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
@@ -774,4 +1032,47 @@ namespace ellnet
         return true;
     }
 
+    void EpollManager::ChangeCtxState(EpollEventContext*ctx, SocketState newState){
+        SocketState oldState = ctx->GetState();
+        switch (oldState)
+        {
+        case LISTEN_WAIT_OPEN:
+            init_listen_num_--;
+            break;
+        case CONNECT_WAIT_OPEN:
+            init_connect_num_--;
+            break;
+        case LISTENING:
+            listening_num_--;
+            break;
+        case CONNECTED:
+            connected_num_--;
+            break;
+        default:
+            break;
+        }
+
+        switch (newState)
+        {
+        case LISTEN_WAIT_OPEN:
+            init_listen_num_++;
+            break;
+        case CONNECT_WAIT_OPEN:
+            init_connect_num_++;
+            break;
+        case LISTENING:
+            listening_num_++;
+            break;
+        case CONNECTED:
+            connected_num_++;
+            break;
+        case CLOSED:
+            close_sock_num_++;
+            break;
+        default:
+            break;
+        }
+
+        ctx->SetState(newState);
+    }
 }

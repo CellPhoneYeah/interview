@@ -1,15 +1,33 @@
 #include <unistd.h>
+#include <execinfo.h>
 
 #include <thread>
 #include <vector>
 #include <ctime>
 #include <chrono>
+#include <stdexcept>
+#include <iostream>
 
 #include "message_queue/global_queue.h"
 #include "ellnet/epoll_net.h"
+#include "signal_handler.h"
 
 namespace ellnet
 {
+    void print_stacktrace() {
+        const int max_frames = 64;
+        void* buffer[max_frames];
+        int frames = backtrace(buffer, max_frames);
+        char** symbols = backtrace_symbols(buffer, frames);
+        
+        std::cerr << "=== Stack Trace ===" << std::endl;
+        for (int i = 0; i < frames; ++i) {
+            std::cerr << symbols[i] << std::endl;
+        }
+        std::cerr << "===================" << std::endl;
+        
+        free(symbols);
+    } 
     static std::string kListenHost = "127.0.0.1";
     static int kListenPort = 8088;
     int worker_count = 2;
@@ -20,13 +38,19 @@ namespace ellnet
     {
         try{
             EpollNet * p_net = EpollNet::GetInstance();
-            if(p_net->ListenOn(kListenHost, kListenPort) == 0){
+            SPDLOG_INFO("entrance worker listen on {}:{}", kListenHost, kListenPort);
+            const int sessionId = p_net->ListenOn(kListenHost, kListenPort);
+            SPDLOG_INFO("entrance worker listen {}", sessionId);
+            if(sessionId > 0){
                 SPDLOG_INFO("start listen {}:{}", kListenHost, kListenPort);
+                p_net->StartListen(sessionId);
             }else{
                 SPDLOG_INFO("listen failed {}:{}", kListenHost, kListenPort);
             }
+            p_net->JoinThread();
         }catch(const std::exception e){
             SPDLOG_ERROR("listen failed {}", e.what());
+            print_stacktrace();
         }
     }
 
@@ -104,43 +128,61 @@ namespace ellnet
     }
 }
 
-int main(){
-    GlobalQueue* gq = GlobalQueue::GetInstance();
-    for (int i = 0; i < ellnet::mq_count; i++)
+int main()
+{
+    // 注册未捕获异常的处理函数
+    std::set_terminate(
+        []()
+        {
+            SPDLOG_ERROR("err happended");
+            std::cout << "unknow err " << std::endl;
+            ellnet::print_stacktrace();
+            std::abort();
+        });
+    try
     {
-        SPDLOG_INFO("new mq id {}", i);
-        gq->NewMQ(i);
+
+        // GlobalQueue *gq = GlobalQueue::GetInstance();
+        // for (int i = 0; i < ellnet::mq_count; i++)
+        // {
+        //     SPDLOG_INFO("new mq id {}", i);
+        //     gq->NewMQ(i);
+        // }
+
+        std::thread net_th = std::thread(ellnet::NetWorker);
+
+        // std::vector<std::thread> workers;
+        // std::vector<std::thread> producers;
+        // for (int i = 0; i < ellnet::worker_count; i++)
+        // {
+        //     SPDLOG_INFO("new work id {}", i);
+        //     workers.emplace_back(ellnet::Worker, i);
+        // }
+
+        // for (int i = 0; i < ellnet::producer_count; i++)
+        // {
+        //     SPDLOG_INFO("new producer id {}", i);
+        //     producers.emplace_back(ellnet::Producer, i);
+        // }
+
+        // for (int i = 0; i < ellnet::worker_count; i++)
+        // {
+        //     workers[i].join();
+        // }
+
+        // for (int i = 0; i < ellnet::producer_count; i++)
+        // {
+        //     producers[i].join();
+        // }
+        net_th.join();
+
+        SPDLOG_INFO("shut down main thread");
+
+        return 0;
     }
-    
-    // std::vector<std::thread> workers;
-    // std::vector<std::thread> producers;
-    // for (int i = 0; i < ellnet::worker_count; i++)
-    // {
-    //     SPDLOG_INFO("new work id {}", i);
-    //     workers.emplace_back(ellnet::Worker, i);
-    // }
-
-    // for (int i = 0; i < ellnet::producer_count; i++)
-    // {
-    //     SPDLOG_INFO("new producer id {}", i);
-    //     producers.emplace_back(ellnet::Producer, i);
-    // }
-
-    // for (int i = 0; i < ellnet::worker_count; i++)
-    // {
-    //     workers[i].detach();
-    // }
-
-    // for (int i = 0; i < ellnet::producer_count; i++)
-    // {
-    //     producers[i].detach();
-    // }
-
-    std::thread net_th = std::thread(ellnet::NetWorker);
-    net_th.detach();
-
-    sleep(120);
-    SPDLOG_INFO("shut down main thread");
-    
-    return 0;
+    catch (const std::exception &e)
+    {
+        SPDLOG_ERROR("caught a exception {}", e.what());
+        ellnet::print_stacktrace();
+    }
 }

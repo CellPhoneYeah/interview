@@ -6,9 +6,11 @@
 #include <unordered_map>
 #include <string>
 #include <atomic>
+#include <mutex>
+#include <sys/epoll.h>
 
-#include "ellnet/epoll_event_context.h"
-#include "ellnet/epoll_net.h"
+#include "epoll_event_context.h"
+#include "epoll_net_header.h"
 
 namespace ellnet
 {
@@ -20,21 +22,16 @@ namespace ellnet
         static const int kMaxEpollEventNum = 1024;
         static const int kMaxEpollReadSize = 1024;
         static void AddContext(EpollEventContext *);
-        static void DelContext(const int fd);
-        static EpollEventContext *GetContext(const int fd);
-
-        int StartListen(std::string addr, const int port);
-        int StopListen(std::string addr, const int port);
-        int ConnectTo(std::string addr, const int port);
-        int OpenConnection(const int id);
+        static void DelContext(const int sessionId);
+        static int NewFdAndBindContext();
+        static EpollEventContext *GetContext(const int sessionId);
         int Loop();
         void DoAccept(struct epoll_event &ev, EpollEventContext *ctx);
         void DoRead(EpollEventContext *ctx);
         void DoConn(epoll_event &ev, EpollEventContext *ctx);
         void DoSend(epoll_event &ev, EpollEventContext *ctx);
         void DoReadPipe(EpollEventContext *ctx);
-        void CloseFd(const int fd);
-        bool SendMsg(const int fd, const char *msg, const int size);
+        void CloseFdAndDelCtx(const int fd);
         static int LivingCount();
         bool NewPipe(const int pipe_fd_out);
         void Run();
@@ -42,24 +39,39 @@ namespace ellnet
         void Stop() { running_ = false; }
         static void StartManager(const int pipe_fd);
         static int ListeningFd(std::string &addr, const int port);
+
+        static void OnDelContext(EpollEventContext* ctx);
+        static void OnAddContext(EpollEventContext* ctx);
         
 
     private:
-        static std::unordered_map<int, EpollEventContext *> id2contexts_;
+        int OpenConnection(const int id);
+
+        int InitListen(const ControlCommand cmd);
+        int StartListen(const ControlCommand cmd);
+        int InitConnect(const ControlCommand cmd);
+        int StartConnect(const ControlCommand cmd);
+        int CloseSocket(const ControlCommand cmd);
+        int SendMsg(const ControlCommand cmd);
+
+        static std::mutex contextMtx;
+        static std::unordered_map<int, EpollEventContext *> sessionId2contexts_;
         static std::unordered_map<int, EpollEventContext *> fd2contexts_;
 
         int Init(const int pipe_in_fd);
-        void SysCloseFd(const int fd);
-        int SysNewFd();
+        static void SysCloseFd(const int fd);
+        static int SysNewFd();
+        static void ChangeCtxState(EpollEventContext*ctx, SocketState newState);
 
         int epoll_fd_;
-        int total_accept_num_;
-        int total_accept_failed_num_;
-        int connected_num_;
-        int connecting_num_;
-        int listening_num_;
-        int new_sock_num_;
-        int close_sock_num_;
+        static int total_accept_num_;
+        static int total_accept_failed_num_;
+        static int connected_num_;
+        static int init_connect_num_;
+        static int listening_num_;
+        static int init_listen_num_;
+        static int new_sock_num_;
+        static int close_sock_num_;
         struct epoll_event event_list_[kMaxEpollEventNum];
         std::unordered_set<int> listening_fds_;
         time_t last_tick_;

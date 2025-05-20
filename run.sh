@@ -1,2 +1,2 @@
 #!/bin/bash
-./entrance/bin/entrance
+./bin/entrance

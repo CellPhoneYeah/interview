@@ -3,8 +3,9 @@
 #include <queue>
 #include <vector>
 #include <string>
+#include <atomic>
 
-#include <string.h>
+#include "epoll_net_header.h"
 namespace ellnet
 {
 
@@ -31,27 +32,36 @@ namespace ellnet
         int offset_pos_ = 0;
 
         explicit EventContext(const int fd);
+        explicit EventContext(const int fd, const SocketState initState);
         EventContext(const int fd, const bool is_listen);
         void ReadBytes(const int byte_len);
         int GetFd() { return ownfd_; }
-        bool IsListening() { return listening_; }
+        bool IsListening() { return this->state == SocketState::LISTENING; }
+        bool IsClosed() { return this->state == SocketState::CLOSED; }
         bool IsConnecting() { return connecting_; }
         void ClearSendQ();
-        void ConnectFinish() { connecting_ = false; }
         void ConnectStart() { connecting_ = true; }
         void Dead() { is_living_ = false; }
         void Living() { is_living_ = true; }
         bool IsDead() { return !is_living_ && !opening_; }
         void SetAddrPort(std::string &ipaddr, const int port);
         bool IsListening(std::string &ipaddr, const int port);
-        std::string GetIpAddr(){return std::string(ipaddr_);};
-        int GetPort(){return port_;};
+        std::string GetIpAddr(){return std::string(ipaddr_);}
+        int GetPort(){return port_;}
+        void finishOpen(){opening_ = false;}
+        void SetFd(int fd);
+        void SetState(SocketState state){this->state = state;}
+        SocketState GetState(){return this->state;}
+
+        int GetSessionId(){return this->session_id_;}
+        void SetSessionId(int id){this->session_id_ = id;}
+        int NextSessionId(){return ++this->kMaxSessionId;}
 
         virtual ~EventContext() = 0;
         virtual int HandleEvent(void *event) = 0;
 
     protected:
-        void SetFd(int fd);
+        static std::atomic<int> kMaxSessionId;
         int session_id_ = 0;
         int ownfd_ = 0;
         int socket_type_ = 0;
@@ -61,6 +71,7 @@ namespace ellnet
         bool is_living_ = false;
         char ipaddr_[46];
         int port_;
+        SocketState state;
     };
 }
 

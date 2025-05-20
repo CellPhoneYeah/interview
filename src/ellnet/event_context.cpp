@@ -6,10 +6,20 @@
 
 namespace ellnet
 {
-    EventContext::EventContext(const int fd)
+    std::atomic<int> EventContext::kMaxSessionId = 0;
+    std::mutex kSessionMutex;
+
+    EventContext::EventContext(const int fd):EventContext(fd, SocketState::CLOSED)
+    {
+    }
+
+    EventContext::EventContext(const int fd, const SocketState initState)
     {
         SetFd(fd);
+        SetState(initState);
+        SetSessionId(EventContext::NextSessionId());
         read_buffer_.resize(EpollManager::kMaxEpollReadSize);
+        SPDLOG_INFO("do create EventContext session {} fd {} state {}", session_id_, fd, (int)initState);
     }
 
     EventContext::EventContext(const int fd, const bool is_listen)
@@ -17,6 +27,11 @@ namespace ellnet
         SetFd(fd);
         opening_ = false;
         listening_ = is_listen;
+        if(is_listen){
+            SetState(CLOSED);
+        }else{
+            SetState(LISTEN_WAIT_OPEN);
+        }
         read_buffer_.resize(EpollManager::kMaxEpollEventNum);
     }
 

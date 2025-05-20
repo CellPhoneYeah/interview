@@ -45,8 +45,8 @@ namespace ellnet
                     }
                     return HANDLE_EVENT_CODE_ACCEPT_FAILED;
                 }
-                SetNoblocking(newFd);
                 EpollEventContext *newContext = new EpollEventContext(newFd);
+                newContext->SetNoblocking();
                 int flag = EPOLLOUT | EPOLLET; // 边缘触发
                 event->events = flag;
                 event->data.ptr = newContext;
@@ -88,10 +88,16 @@ namespace ellnet
         return 0;
     }
 
-    void EpollEventContext::SetNoblocking(const int fd)
+    void EpollEventContext::SetNoblocking()
     {
-        int flag = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flag | O_NONBLOCK);
+        int flag = fcntl(ownfd_, F_GETFL, 0);
+        fcntl(ownfd_, F_SETFL, flag | O_NONBLOCK);
+    }
+
+    void EpollEventContext::SetBlocking()
+    {
+        int flag = fcntl(ownfd_, F_GETFL, 0);
+        fcntl(ownfd_, F_SETFL, flag & ~O_NONBLOCK);
     }
 
     void EpollEventContext::PushMsgQ(const char *msg, const int size)
@@ -103,6 +109,7 @@ namespace ellnet
         }
         send_q_.push(std::vector<char>(msg, msg + size));
         std::cout << send_q_.size() << " insert send queue success " << ownfd_ << " : " << std::string(msg) << std::endl;
+        delete msg;
     }
 
     void EpollEventContext::ProcessData(char *data, int size)
@@ -135,6 +142,11 @@ namespace ellnet
         connecting_ = false;
     }
 
+    EpollEventContext::EpollEventContext(const int fd, const SocketState initState) : EventContext(fd, initState)
+    {
+        connecting_ = false;
+    }
+
     EpollEventContext::EpollEventContext(const int fd, bool listening) : EventContext(fd, listening)
     {
         connecting_ = false;
@@ -153,5 +165,6 @@ namespace ellnet
             std::shared_ptr<MessageQueue> newmq = gq->NewMQ(ownfd_);
             mq_ = newmq;
         }
+        return 0;
     }
 }

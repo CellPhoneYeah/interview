@@ -3,51 +3,31 @@
 #include <string>
 #include <atomic>
 #include <string.h>
+#include <thread>
 
-#include "ellnet/epoll_connect_handler.h"
-#include "ellnet/epoll_manager.h"
+#include "epoll_connect_handler.h"
+#include "epoll_manager.h"
+#include "epoll_net_header.h"
 namespace ellnet
 {
-    enum CommandType
-    {
-        CMD_START_LISTEN,
-        CMD_STOP_LISTEN,
-        CMD_CONNECT_TO,
-        CMD_DISCONNECT,
-        CMD_OPEN_CONNECT,
-        CMD_EXIT
-    };
-
-    enum ManagerState
-    {
-        STOP,
-        RUNNING
-    };
-
-    struct ControlCommand
-    {
-        CommandType cmd;
-        int fd;
-        int port;
-        char ipaddr[46]; // fix ipv4 ipv6
-    };
-
     class EpollManager;
-
     class EpollNet
     {
     public:
         static EpollNet *GetInstance();
-        int SendMsg(std::string msg, const int fd);
+        int SendMsg(std::string msg, const int sessionId);
         int ListenOn(std::string ipaddr, const int port);
+        void StartListen(const int sessionId);
         int ConnectTo(std::string ipaddr, const int port);
-        int StopListen(std::string ipaddr, const int port);
+        void StartConnect(const int sessionId);
+        void CloseSocket(int sessionId);
         EpollManager *GetManager() { return epoll_manager_; }
         static void SetManagerState(const bool newState) { EpollNet::manager_state_ = newState; }
         void SetConnectHandler(EpollConnectHandler *handler) { this->connhandler_ = handler; }
+        void JoinThread();
 
     private:
-        static void StartManager(const int pipe_fd_out);
+        void StartManager(const int pipe_fd_out);
 
         EpollNet();
         ~EpollNet();
@@ -60,6 +40,7 @@ namespace ellnet
 
         int pipe_fd_[2];
         std::atomic<bool> running_;
+        std::thread thread_;
         static std::atomic<bool> manager_state_;
         static EpollNet *instance_;
     };
