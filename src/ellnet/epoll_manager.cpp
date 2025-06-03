@@ -108,8 +108,9 @@ namespace ellnet
             EpollEventContext* pCtx = it->second;
             OnDelContext(pCtx);
             int fd = pCtx->GetFd();
+            SPDLOG_INFO("to del id {} fd {} ", sessionId, fd);
             delete (pCtx);
-            delete fd2contexts_.find(fd)->second;
+            // delete fd2contexts_.find(fd)->second;
             fd2contexts_.erase(fd);
         }
         sessionId2contexts_.erase(sessionId);
@@ -971,7 +972,7 @@ namespace ellnet
 
             case CommandType::CMD_START_CONNECT:
             {
-                SPDLOG_INFO("connect {}:{}", cmd.ipaddr, cmd.port);
+                SPDLOG_INFO("connect {} {}:{}", cmd.sessionId, cmd.ipaddr, cmd.port);
                 int ret = StartConnect(cmd);
                 if (ret != 0)
                 {

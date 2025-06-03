@@ -8,10 +8,10 @@
                 "${workspaceFolder}/3rd/**",
                 "/usr/include/**",
                 "${workspaceFolder}",
-                "${workspaceFolder}/include",
+                "${workspaceFolder}/include/**",
                 "${workspaceFolder}/include/spdlog",
                 "${workspaceFolder}/include/ellnet",
-                "${workspaceFolder}/include/common",
+                "${workspaceFolder}/include/common/**",
                 "${workspaceFolder}/include/message_queue",
                 "${workspaceFolder}/include/watchdog",
                 "${workspaceFolder}/include/testlib",
@@ -21,8 +21,8 @@
             "defines": [],
             "compilerPath": "/usr/bin/g++-13",
             "intelliSenseMode": "linux-gcc-x64",
-            "cStandard": "c17",
-            "cppStandard": "c++17"
+            "cStandard": "c23",
+            "cppStandard": "c++20"
         }
     ],
     "version": 4
