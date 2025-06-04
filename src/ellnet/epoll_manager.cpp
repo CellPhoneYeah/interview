@@ -746,7 +746,7 @@ namespace ellnet
         ctx->SetNoblocking();
         while (1)
         {
-            int read_bytes = recv(current_fd, ctx->read_buffer_.data() + ctx->offset_pos_, kMaxEpollReadSize, 0);
+            int read_bytes = recv(current_fd, ctx->read_buffer_.data() + ctx->read_offset_, kMaxEpollReadSize, 0);
             if (read_bytes == 0)
             {
                 // 断开连接
@@ -790,7 +790,7 @@ namespace ellnet
                     CloseFdAndDelCtx(sessionId);
                     return;
                 }
-                SPDLOG_WARN("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, strerror(errno), ctx->read_buffer_.data(), ctx->offset_pos_);
+                SPDLOG_WARN("unknow err for epoll fd recv {} err:{} msg: {} offset: {}", current_fd, strerror(errno), ctx->read_buffer_.data(), ctx->read_offset_);
                 CloseFdAndDelCtx(sessionId);
                 return;
             }
@@ -848,6 +848,7 @@ namespace ellnet
                 return;
             }
             auto msg = ctx->send_q_.front();
+            SPDLOG_INFO("do send msg:{}", std::string(msg.data()));
             int sent = send(current_fd, msg.data() + ctx->offset_pos_, msg.size() - ctx->offset_pos_, MSG_NOSIGNAL);
             if (sent < 0)
             {
@@ -1022,7 +1023,7 @@ namespace ellnet
         EpollEventContext *ctx = GetContext(cmd.sessionId);
         if (ctx == nullptr)
         {
-            return false;
+            return 1;
         }
         const int fd = ctx->GetFd();
         ctx->PushMsgQ(cmd.msg, cmd.msgSize);
@@ -1030,7 +1031,7 @@ namespace ellnet
         ev.data.ptr = ctx;
         ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
         epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev);
-        return true;
+        return 0;
     }
 
     void EpollManager::ChangeCtxState(EpollEventContext*ctx, SocketState newState){

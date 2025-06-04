@@ -19,6 +19,7 @@ namespace ellnet
         SetState(initState);
         SetSessionId(EventContext::NextSessionId());
         read_buffer_.resize(EpollManager::kMaxEpollReadSize);
+        tmp_buffer_.resize(1024);
         SPDLOG_INFO("do create EventContext session {} fd {} state {}", session_id_, fd, (int)initState);
     }
 
@@ -32,6 +33,7 @@ namespace ellnet
         }else{
             SetState(LISTEN_WAIT_OPEN);
         }
+        tmp_buffer_.resize(1024);
         read_buffer_.resize(EpollManager::kMaxEpollEventNum);
     }
 
@@ -59,11 +61,20 @@ namespace ellnet
 
     void EventContext::ReadBytes(const int byte_len)
     {
-        // std::cout << std::string(readBuffer.data()) << std::endl;
-        SPDLOG_INFO("recv msg from {}", ownfd_);
+        if(byte_len < 0){
+            SPDLOG_ERROR("read byte len illegal {}", byte_len);
+            return;
+        }
+        if(read_offset_ > read_buffer_.size()){
+            SPDLOG_ERROR("read buffer offset pos illegal offset {} size {}", read_offset_, read_buffer_.size());
+            return;
+        }
+        SPDLOG_INFO(" recv msg from fd:{} size:{} offset:{}", ownfd_, byte_len, read_offset_);
         Living();
-        read_buffer_.erase(read_buffer_.begin(), read_buffer_.begin() + offset_pos_);
-        offset_pos_ = 0;
+        std::string msg(read_buffer_.begin(), read_buffer_.begin() + byte_len);
+        read_buffer_.erase(read_buffer_.begin(), read_buffer_.begin() + byte_len);
+        SPDLOG_INFO("after recv msg from {} msg:{} size:{}", ownfd_, msg, msg.size());
+        read_offset_ = 0;
     }
 
     EventContext::~EventContext()

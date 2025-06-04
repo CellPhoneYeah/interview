@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <vector>
+#include <sstream>
 
 #include "spdlog/slog.h"
 #include "ellnet/epoll_net.h"
@@ -16,19 +17,19 @@ void SendMsg(const int sessionId)
 {
     SPDLOG_INFO("thread to send msg {}", sessionId);
     // std::this_thread::sleep_for(std::chrono::seconds(3));
-    std::string str = "hello i am ";
-    std::string newstr = str.append(std::to_string(sessionId));
+    
     try
     {
         SPDLOG_INFO("thread to send msg ");
         instance->StartConnect(sessionId);
         // std::this_thread::sleep_for(std::chrono::seconds(3));
         ellnet::EpollNet *instance = ellnet::EpollNet::GetInstance();
-        SPDLOG_INFO("thread to send msg {}", newstr);
         int msgId = 1;
         for (;;)
         {
-            newstr = newstr.append(" msgId ").append(std::to_string(msgId++));
+            std::stringstream ss;
+            ss << "hello i am "  << sessionId << " send msg Id: " << msgId++;
+            std::string newstr = ss.str();
             SPDLOG_INFO("thread to send msg {}", newstr);
             instance->SendMsg(newstr, sessionId);
             std::this_thread::sleep_for(std::chrono::seconds(10));

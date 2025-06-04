@@ -29,7 +29,9 @@ namespace ellnet
     public:
         std::queue<std::vector<char>> send_q_;
         std::vector<char> read_buffer_;
+        std::vector<char> tmp_buffer_;
         int offset_pos_ = 0;
+        int read_offset_ = 0;
 
         explicit EventContext(const int fd);
         explicit EventContext(const int fd, const SocketState initState);

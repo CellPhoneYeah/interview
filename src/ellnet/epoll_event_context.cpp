@@ -108,7 +108,7 @@ namespace ellnet
             return;
         }
         send_q_.push(std::vector<char>(msg, msg + size));
-        std::cout << send_q_.size() << " insert send queue success " << ownfd_ << " : " << std::string(msg) << std::endl;
+        SPDLOG_INFO(" insert queue size: {} queue id: {} a msg: {}", send_q_.size(), ownfd_, std::string(msg));
         delete msg;
     }
 
