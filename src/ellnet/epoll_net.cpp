@@ -173,4 +173,11 @@ namespace ellnet
         }
     }
 
+    void EpollNet::close()
+    {
+        SPDLOG_INFO("close epoll net");
+        EpollManager::Stop();
+        SPDLOG_INFO("epoll net closed");
+    }
+
 }

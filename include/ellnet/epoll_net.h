@@ -21,6 +21,7 @@ namespace ellnet
         int ConnectTo(std::string ipaddr, const int port);
         void StartConnect(const int sessionId);
         void CloseSocket(int sessionId);
+        void close();
         EpollManager *GetManager() { return epoll_manager_; }
         static void SetManagerState(const bool newState) { EpollNet::manager_state_ = newState; }
         void SetConnectHandler(EpollConnectHandler *handler) { this->connhandler_ = handler; }

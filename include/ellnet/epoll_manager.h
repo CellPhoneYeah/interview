@@ -21,6 +21,7 @@ namespace ellnet
         ~EpollManager();
         static const int kMaxEpollEventNum = 1024;
         static const int kMaxEpollReadSize = 1024;
+        static EpollManager* pMgr;
         static void AddContext(EpollEventContext *);
         static void DelContext(const int sessionId);
         static int NewFdAndBindContext();
@@ -36,7 +37,7 @@ namespace ellnet
         bool NewPipe(const int pipe_fd_out);
         void Run();
         bool IsRunning() { return running_; }
-        void Stop() { running_ = false; }
+        static void Stop();
         static void StartManager(const int pipe_fd);
         static int ListeningFd(std::string &addr, const int port);
 
@@ -55,6 +56,7 @@ namespace ellnet
         int SendMsg(const ControlCommand cmd);
 
         static std::mutex contextMtx;
+        static std::mutex isRunningMtx;
         static std::unordered_map<int, EpollEventContext *> sessionId2contexts_;
         static std::unordered_map<int, EpollEventContext *> fd2contexts_;
 

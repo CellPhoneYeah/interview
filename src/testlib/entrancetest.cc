@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <csignal>
 
 #include "spdlog/slog.h"
 #include "ellnet/epoll_net.h"
@@ -12,6 +13,8 @@
 std::string host = "127.0.0.1";
 int port = 8088;
 ellnet::EpollNet *instance = ellnet::EpollNet::GetInstance();
+std::mutex g_mutex;
+bool running = true;
 
 void SendMsg(const int sessionId)
 {
@@ -27,6 +30,10 @@ void SendMsg(const int sessionId)
         int msgId = 1;
         for (;;)
         {
+            if(!running){
+                SPDLOG_INFO("test thread {} finished !!!", sessionId);
+                return;
+            }
             std::stringstream ss;
             ss << "hello i am "  << sessionId << " send msg Id: " << msgId++;
             std::string newstr = ss.str();
@@ -62,9 +69,45 @@ void myTerminateHandler() {
     std::abort();
 }
 
+volatile sig_atomic_t g_signal_received = 0;
+
+void signal_handler(int signal)
+{
+    SPDLOG_INFO("handler signal {} ...", signal);
+    if(running){
+        SPDLOG_INFO("stop running ...");
+        std::lock_guard<std::mutex> lock(g_mutex);
+        running = false;
+    }
+    ellnet::EpollNet * p_net = ellnet::EpollNet::GetInstance();
+    p_net->close();
+}
+
+void clean_up()
+{
+    SPDLOG_INFO("Cleaning up...");
+    if(running){
+        SPDLOG_INFO("stop running ...");
+        std::lock_guard<std::mutex> lock(g_mutex);
+        running = false;
+    }
+    ellnet::EpollNet * p_net = ellnet::EpollNet::GetInstance();
+    p_net->close();
+}
+
 int main()
 {
-    std::set_terminate(myTerminateHandler);
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    signal(SIGSEGV, signal_handler);
+    signal(SIGABRT, signal_handler);
+    signal(SIGPIPE, SIG_IGN); // 忽略SIGPIPE信号
+    std::set_terminate(
+        []()
+        {
+            clean_up();
+            std::abort();
+        });
     std::vector<std::thread> threads;
     try
     {

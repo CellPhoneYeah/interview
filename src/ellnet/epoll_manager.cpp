@@ -21,6 +21,8 @@
 namespace ellnet
 {
     std::mutex EpollManager::contextMtx;
+    std::mutex EpollManager::isRunningMtx;
+    EpollManager *EpollManager::pMgr = nullptr;
     int EpollManager::new_sock_num_ = 0;
     int EpollManager::close_sock_num_ = 0;
     int EpollManager::total_accept_num_ = 0;
@@ -238,10 +240,16 @@ namespace ellnet
 
     void EpollManager::StartManager(const int pipe_fd)
     {
-        try{
-        EpollManager *emgr = new EpollManager(pipe_fd);
-        emgr->Run();
-        }catch(std::exception e){
+        try
+        {
+            pMgr = new EpollManager(pipe_fd);
+            pMgr->Run();
+            delete pMgr;
+            pMgr = nullptr;
+            SPDLOG_INFO("EpollManager run done");
+        }
+        catch (std::exception e)
+        {
             SPDLOG_ERROR("Start Manager  run failed : {}", e.what());
         }
     }
@@ -568,10 +576,6 @@ namespace ellnet
         int Loopcount = 0;
         for (;;)
         {
-            if (!IsRunning())
-            {
-                break;
-            }
             Loopcount++;
             time_t current_time = std::time(nullptr);
             if (std::difftime(current_time, last_tick_) > 20)
@@ -592,13 +596,19 @@ namespace ellnet
             {
                 struct epoll_event ev_list[kMaxEpollEventNum];
                 int eventn = epoll_wait(epoll_fd_, ev_list, kMaxEpollEventNum, -1); // 阻塞直到有事件到达
+                if (!IsRunning())
+                {
+                    SPDLOG_INFO("epoll break by signal and not running, exit loop");
+                    return 0;
+                }
                 if (eventn < 0)
                 {
                     if (errno == EINTR)
                     {
                         // 信号中断
                         SPDLOG_INFO("epoll break by signal ");
-                        continue;
+                        running_ = false;
+                        return 0;
                     }
                     SPDLOG_INFO("epoll wait err:{}", std::strerror(errno));
                     break;
@@ -1077,4 +1087,26 @@ namespace ellnet
 
         ctx->SetState(newState);
     }
+
+    void EpollManager::Stop()
+    {
+        if(pMgr == nullptr){
+            SPDLOG_INFO("epoll manager already stoped");
+            return;
+        }
+        if (!pMgr->IsRunning())
+        {
+            SPDLOG_INFO("epoll manager already stoped");
+            return;
+        }
+        std::lock_guard<std::mutex> lock(pMgr->isRunningMtx);
+        pMgr->running_ = false;
+        while (pMgr != nullptr)
+        {
+            SPDLOG_INFO("wait epoll manager stoped");
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+        SPDLOG_INFO("epoll manager stoped");
+    }
+
 }

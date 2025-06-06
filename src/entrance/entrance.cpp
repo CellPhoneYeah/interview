@@ -7,6 +7,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <iostream>
+#include <csignal>
 
 #include "message_queue/global_queue.h"
 #include "ellnet/epoll_net.h"
@@ -14,6 +15,9 @@
 
 namespace ellnet
 {
+    std::mutex g_mutex;
+    bool running = true;
+    bool workerDone = false;
     void print_stacktrace() {
         const int max_frames = 64;
         void* buffer[max_frames];
@@ -63,7 +67,10 @@ namespace ellnet
         time_t last_show_time = std::time(nullptr);
         for (;;)
         {
-            // sleep(5);
+            if(!running){
+                SPDLOG_INFO("worker {} exit now", id);
+                return;
+            }
             mq = gq->PopMQHasMsg();
             time_t now = std::time(nullptr);
             if (mq != nullptr)
@@ -75,6 +82,7 @@ namespace ellnet
                     if(handle_count >= INT32_MAX){
                         handle_count = 0;
                     }
+                    SPDLOG_INFO("{} worker handle msg: {} count:{}", id, msg, handle_count);
                 }
                 gq->BackMQ(mq);
                 // SPDLOG_INFO("{} worker handle msg:{}", id, handle_count);
@@ -127,16 +135,33 @@ namespace ellnet
         }
     }
 }
+volatile sig_atomic_t g_signal_received = 0;
+
+void signal_handler(int signal)
+{
+    SPDLOG_INFO("handler signal {} ...", signal);
+    ellnet::EpollNet * p_net = ellnet::EpollNet::GetInstance();
+    p_net->close();
+}
+
+void clean_up()
+{
+    SPDLOG_INFO("Cleaning up...");
+    ellnet::EpollNet * p_net = ellnet::EpollNet::GetInstance();
+    p_net->close();
+}
 
 int main()
 {
-    // 注册未捕获异常的处理函数
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    signal(SIGSEGV, signal_handler);
+    signal(SIGABRT, signal_handler);
+    signal(SIGPIPE, SIG_IGN); // 忽略SIGPIPE信号
     std::set_terminate(
         []()
         {
-            SPDLOG_ERROR("err happended");
-            std::cout << "unknow err " << std::endl;
-            ellnet::print_stacktrace();
+            clean_up();
             std::abort();
         });
     try
