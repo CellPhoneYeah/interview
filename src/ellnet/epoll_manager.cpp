@@ -17,6 +17,7 @@
 #include "epoll_event_context.h"
 #include "epoll_net.h"
 #include "epoll_net_header.h"
+#include "memory_traker.h"
 
 namespace ellnet
 {
@@ -39,7 +40,7 @@ namespace ellnet
     {
         int newFd = SysNewFd();
         EpollEventContext *newCtx = new EpollEventContext(newFd);
-        SPDLOG_INFO("create new ctx and bind {}", newCtx->GetSessionId());
+        SPDLOG_INFO("create new ctx and bind {} context size {}", newCtx->GetSessionId(), sizeof(EpollEventContext));
         AddContext(newCtx);
         return newCtx->GetSessionId();
     }
@@ -762,7 +763,6 @@ namespace ellnet
                 // 断开连接
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, current_fd, nullptr);
                 EpollManager::DelContext(sessionId);
-                connected_num_--;
                 SPDLOG_INFO(" close fd {}", current_fd);
                 return;
             }
@@ -1104,7 +1104,7 @@ namespace ellnet
         while (pMgr != nullptr)
         {
             SPDLOG_INFO("wait epoll manager stoped");
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         SPDLOG_INFO("epoll manager stoped");
     }

@@ -19,8 +19,8 @@ namespace ellnet
     public:
         explicit EpollManager(const int pipe_in_fd = -1);
         ~EpollManager();
-        static const int kMaxEpollEventNum = 1024;
-        static const int kMaxEpollReadSize = 1024;
+        static const int kMaxEpollEventNum = 64;
+        static const int kMaxEpollReadSize = 64;
         static EpollManager* pMgr;
         static void AddContext(EpollEventContext *);
         static void DelContext(const int sessionId);

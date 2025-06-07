@@ -11,7 +11,6 @@
 
 #include "message_queue/global_queue.h"
 #include "ellnet/epoll_net.h"
-// #include "signal_handler.h"
 
 namespace ellnet
 {

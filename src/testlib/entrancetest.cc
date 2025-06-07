@@ -8,7 +8,6 @@
 
 #include "spdlog/slog.h"
 #include "ellnet/epoll_net.h"
-// #include "common/signal_handler.h"
 
 std::string host = "127.0.0.1";
 int port = 8088;
@@ -39,7 +38,7 @@ void SendMsg(const int sessionId)
             std::string newstr = ss.str();
             SPDLOG_INFO("thread to send msg {}", newstr);
             instance->SendMsg(newstr, sessionId);
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         SPDLOG_INFO("test thread {} finished !!!", sessionId);
     }
@@ -112,7 +111,7 @@ int main()
     try
     {
         SPDLOG_INFO("connect to {}:{}", host, port);
-        for (int i = 0; i < 1; i++)
+        for (int i = 0; i < 10; i++)
         {
             const int sessionId = instance->ConnectTo(host, port);
             if (sessionId <= 0)

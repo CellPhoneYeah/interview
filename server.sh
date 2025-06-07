@@ -1,6 +1,6 @@
 #!/bin/bash
 if [ -e "net/bin/server" ]; then
-    ./ellnet/bin/server
+    ./bin/entrance
 else
     echo "file not exists"
 fi

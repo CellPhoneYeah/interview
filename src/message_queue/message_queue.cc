@@ -1,7 +1,7 @@
 #include "message_queue/message_queue.h"
 #include "slog.h"
 
-size_t MessageQueue::max_message_queue_size = 1024;
+size_t MessageQueue::max_message_queue_size = 64;
 // size_t MessageQueue::max_message_queue_size = 1 << 6;
 
 int MessageQueue::PutM(const std::string &msg){
